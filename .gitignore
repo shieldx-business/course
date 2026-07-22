@@ -31,6 +31,7 @@ wheels/
 # Next.js
 .next/
 out/
+*.tsbuildinfo
 
 # Python
 .venv/
