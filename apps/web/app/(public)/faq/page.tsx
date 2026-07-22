@@ -1,0 +1,36 @@
+export default function FAQPage() {
+  const items = [
+    {
+      q: "What is included in the membership?",
+      a: "Every membership includes unlimited access to the full library of 2,000+ courses across all categories.",
+    },
+    {
+      q: "Can I cancel my subscription?",
+      a: "Yes. Monthly, 3-month, 6-month, and 12-month plans can be cancelled anytime. You keep access until the end of your billing period.",
+    },
+    {
+      q: "Do you offer refunds?",
+      a: "We offer a 7-day money-back guarantee, no questions asked, one time per account.",
+    },
+    {
+      q: "How does the free preview work?",
+      a: "Verify your phone number to unlock 10% of any course for 3 days — no credit card required.",
+    },
+  ];
+
+  return (
+    <section className="py-16">
+      <div className="mx-auto max-w-page px-6 max-w-3xl">
+        <h1 className="text-3xl font-semibold text-primary-900">Frequently asked questions</h1>
+        <dl className="mt-8 space-y-4">
+          {items.map((item) => (
+            <div key={item.q} className="rounded-lg border border-neutral-300 p-6">
+              <dt className="font-medium text-neutral-900">{item.q}</dt>
+              <dd className="mt-2 text-sm text-neutral-600">{item.a}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
+    </section>
+  );
+}
