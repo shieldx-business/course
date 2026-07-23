@@ -48,6 +48,7 @@ export interface Review {
   role: string;
   quote: string;
   outcome: string;
+  rating?: number;
 }
 
 export interface Progress {

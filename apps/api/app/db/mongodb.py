@@ -211,9 +211,9 @@ async def seed_db():
 
     if await db.reviews.count_documents({}) == 0:
         reviews = [
-            {"_id": "rev-1", "name": "Sarah Lin", "role": "Operations Analyst", "outcome": "I finally understood Power BI well enough to run our team's weekly report.", "quote": "The course is structured exactly how I learn."},
-            {"_id": "rev-2", "name": "Marcus Rivera", "role": "Marketing Coordinator", "outcome": "Excel skills that got me noticed for the promotion I wanted.", "quote": "I use what I learned every single day."},
-            {"_id": "rev-3", "name": "Priya Shah", "role": "Junior UX Designer", "outcome": "Went from admin work to my first design role in 9 months.", "quote": "The career change path made the difference."},
+            {"_id": "rev-1", "name": "Sarah Lin", "role": "Operations Analyst", "rating": 5, "outcome": "I finally understood Power BI well enough to run our team's weekly report.", "quote": "The course is structured exactly how I learn."},
+            {"_id": "rev-2", "name": "Marcus Rivera", "role": "Marketing Coordinator", "rating": 5, "outcome": "Excel skills that got me noticed for the promotion I wanted.", "quote": "I use what I learned every single day."},
+            {"_id": "rev-3", "name": "Priya Shah", "role": "Junior UX Designer", "rating": 4, "outcome": "Went from admin work to my first design role in 9 months.", "quote": "The career change path made the difference."},
         ]
         await db.reviews.insert_many(reviews)
 
