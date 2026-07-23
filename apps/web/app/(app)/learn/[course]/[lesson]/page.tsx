@@ -31,6 +31,7 @@ export default function CoursePlayerPage({ params }: { params: { course: string;
   const [savingNote, setSavingNote] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const lastUpdateRef = useRef<number>(0);
+  const pauseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -155,7 +156,7 @@ export default function CoursePlayerPage({ params }: { params: { course: string;
   }
 
   const currentProgress = progress[current.id];
-  const startPosition = currentProgress?.last_position_seconds || 0;
+  const startPosition = currentProgress?.completed ? 0 : (currentProgress?.last_position_seconds || 0);
 
   return (
     <section className="py-6">
@@ -184,8 +185,27 @@ export default function CoursePlayerPage({ params }: { params: { course: string;
                       }
                     }}
                     onTimeUpdate={(e) => throttledProgress(false, Math.floor(e.currentTarget.currentTime))}
-                    onPause={(e) => updateProgress(false, Math.floor(e.currentTarget.currentTime))}
-                    onEnded={() => updateProgress(true, 0)}
+                    onPlay={() => {
+                      if (pauseTimeoutRef.current) {
+                        clearTimeout(pauseTimeoutRef.current);
+                        pauseTimeoutRef.current = null;
+                      }
+                    }}
+                    onPause={(e) => {
+                      if (pauseTimeoutRef.current) clearTimeout(pauseTimeoutRef.current);
+                      const video = e.currentTarget;
+                      pauseTimeoutRef.current = setTimeout(() => {
+                        updateProgress(false, Math.floor(video.currentTime));
+                      }, 500);
+                    }}
+                    onEnded={(e) => {
+                      if (pauseTimeoutRef.current) {
+                        clearTimeout(pauseTimeoutRef.current);
+                        pauseTimeoutRef.current = null;
+                      }
+                      const video = e.currentTarget;
+                      updateProgress(true, Math.floor(video.duration || video.currentTime));
+                    }}
                   />
                   <WatermarkOverlay email={user?.email} />
                 </>

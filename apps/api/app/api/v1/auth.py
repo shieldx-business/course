@@ -112,6 +112,8 @@ async def signup(body: AuthIn):
         "phone_verified": False,
         "trial_active": False,
         "trial_expires": None,
+        "oauth_provider": "email",
+        "oauth_id": None,
         "role": "user",
     }
     await db.users.insert_one(user)
@@ -224,6 +226,8 @@ async def verify_otp(body: OTPVerify):
             "phone_verified": True,
             "trial_active": True,
             "trial_expires": trial_expires,
+            "oauth_provider": "phone",
+            "oauth_id": sanitized,
             "role": "user",
         }
         await db.users.insert_one(user)
@@ -322,6 +326,8 @@ async def google_auth(body: GoogleAuthIn):
             "phone_verified": False,
             "trial_active": False,
             "trial_expires": None,
+            "oauth_provider": "google",
+            "oauth_id": idinfo.get("sub"),
             "role": "user",
         }
         await db.users.insert_one(user)

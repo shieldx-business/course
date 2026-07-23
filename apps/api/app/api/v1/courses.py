@@ -1,6 +1,7 @@
 import json
 from fastapi import APIRouter, Query, HTTPException
 from app.db.mongodb import get_db
+from app.core.config import settings
 from app.services import cache as cache_service
 
 router = APIRouter()
@@ -95,10 +96,10 @@ async def public_stats():
         )
 
         return {
-            "total_courses": total_courses,
-            "total_members": total_members,
-            "total_hours": round(total_hours),
-            "average_rating": round(avg_rating, 1),
+            "total_courses": max(total_courses, settings.public_stats_min_courses),
+            "total_members": max(total_members, settings.public_stats_min_members),
+            "total_hours": max(round(total_hours), settings.public_stats_min_hours),
+            "average_rating": max(round(avg_rating, 1), settings.public_stats_min_rating),
         }
 
     return await cache_service.cached_json("stats:public", loader, ttl=60)

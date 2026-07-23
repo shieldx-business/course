@@ -59,6 +59,7 @@ export interface Review {
   quote: string;
   outcome: string;
   rating?: number;
+  verified?: boolean;
 }
 
 export interface Progress {

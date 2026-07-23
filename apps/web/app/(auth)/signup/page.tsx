@@ -18,6 +18,7 @@ export default function SignupPage() {
   const [error, setError] = useState("");
   const router = useRouter();
   const { login } = useAuth();
+  const googleClientId = process.env.NEXT_PUBLIC_GOOGLE_OAUTH_CLIENT_ID;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -77,10 +78,14 @@ export default function SignupPage() {
           <Button type="submit" className="w-full">Create account</Button>
         </form>
 
-        <div className="my-4 text-center text-sm text-neutral-600">or</div>
-        <div className="flex justify-center">
-          <GoogleLogin onSuccess={handleGoogle} onError={() => setError("Google sign-in failed")} text="signup_with" />
-        </div>
+        {googleClientId && (
+          <>
+            <div className="my-4 text-center text-sm text-neutral-600">or</div>
+            <div className="flex justify-center">
+              <GoogleLogin onSuccess={handleGoogle} onError={() => setError("Google sign-in failed")} text="signup_with" />
+            </div>
+          </>
+        )}
 
         <p className="mt-4 text-center text-sm text-neutral-600">
           Already have an account? <Link href="/login" className="text-primary-700 hover:underline">Log in</Link>

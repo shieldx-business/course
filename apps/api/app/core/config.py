@@ -27,6 +27,10 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o-mini"
     google_oauth_client_id: str = ""
     google_oauth_client_secret: str = ""
+    public_stats_min_courses: int = 2000
+    public_stats_min_members: int = 50000
+    public_stats_min_hours: int = 1200000
+    public_stats_min_rating: float = 4.8
 
     class Config:
         env_file = ".env"

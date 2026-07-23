@@ -23,7 +23,7 @@ npm run dev
 
 ## Project structure
 
-- `apps/web` — Next.js 15 + TypeScript + Tailwind CSS frontend
+- `apps/web` — Next.js 14.2.5 + TypeScript + Tailwind CSS frontend
 - `apps/api` — FastAPI Python backend
 - `docker/` — local development Docker Compose
 - `k8s/` — Kubernetes manifests

@@ -2,15 +2,18 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.db.mongodb import seed_db
-from app.worker import start_worker
+from app.worker import start_worker, stop_worker
 from app.api.v1 import courses, auth, subscriptions, reviews, admin, stream, progress, contact, blog
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await seed_db()
-    start_worker(app)
-    yield
+    await start_worker(app)
+    try:
+        yield
+    finally:
+        stop_worker()
 
 
 app = FastAPI(title="Ascendly API", version="0.1.0", lifespan=lifespan)
