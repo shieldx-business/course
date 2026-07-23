@@ -19,6 +19,7 @@ export async function apiFetch(path: string, options: RequestInit = {}) {
   const res = await fetch(url, {
     ...options,
     headers,
+    credentials: "include",
   });
   if (!res.ok) {
     const text = await res.text();

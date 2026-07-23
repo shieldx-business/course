@@ -1,3 +1,4 @@
+import json
 import math
 import secrets
 import time
@@ -5,24 +6,20 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import Response, StreamingResponse
 from app.core.deps import get_current_user
+from app.core.rate_limit import get_client_ip, rate_limit
 from app.db.mongodb import get_db
 from app.services.drive import is_drive_configured, get_file_bytes
 from app.services import watermark as watermark_service
+from app.services import cache as cache_service
 
 router = APIRouter()
 
-# In-memory token and session stores; replace with Redis in production
-_stream_tokens: dict[str, dict] = {}
-_user_tokens: dict[str, list[str]] = {}
 MAX_CONCURRENT_STREAMS = 2
+TOKEN_TTL = 300
 
 
-def _cleanup_user_tokens(user_id: str):
-    now = time.time()
-    tokens = _user_tokens.get(user_id, [])
-    tokens = [t for t in tokens if t in _stream_tokens and _stream_tokens[t]["expires"] > now]
-    _user_tokens[user_id] = tokens
-    return tokens
+async def _rate_limit_stream(request: Request):
+    await rate_limit(request, key=get_client_ip(request), limit=30, window=60)
 
 
 def _trial_unlocked_count(course: dict) -> int:
@@ -61,7 +58,34 @@ async def _has_access(user: dict, course: dict, lesson_index: int, db) -> bool:
         return False
 
 
-@router.post("/lessons/{lesson_id}/stream-token")
+async def _cleanup_user_tokens(user_id: str):
+    cache = await cache_service.get_cache()
+    key = f"streams:user:{user_id}"
+    raw = await cache.get(key)
+    tokens = json.loads(raw) if raw else []
+    now = time.time()
+    valid = []
+    for token in tokens:
+        data = await _get_stream_token(token)
+        if data and data.get("expires", 0) > now:
+            valid.append(token)
+    if len(valid) != len(tokens):
+        await cache.setex(key, TOKEN_TTL, json.dumps(valid))
+    return valid
+
+
+async def _get_stream_token(token: str) -> dict | None:
+    cache = await cache_service.get_cache()
+    raw = await cache.get(f"stream:{token}")
+    if not raw:
+        return None
+    try:
+        return json.loads(raw)
+    except Exception:
+        return None
+
+
+@router.post("/lessons/{lesson_id}/stream-token", dependencies=[Depends(_rate_limit_stream)])
 async def create_stream_token(lesson_id: str, user: dict = Depends(get_current_user)):
     db = get_db()
     course = None
@@ -83,23 +107,30 @@ async def create_stream_token(lesson_id: str, user: dict = Depends(get_current_u
     if not await _has_access(user, course, lesson_index, db):
         raise HTTPException(status_code=403, detail="Subscription or trial required")
 
-    user_tokens = _cleanup_user_tokens(user["id"])
+    user_tokens = await _cleanup_user_tokens(user["id"])
     if len(user_tokens) >= MAX_CONCURRENT_STREAMS:
-        oldest = user_tokens[0]
-        _stream_tokens.pop(oldest, None)
-        user_tokens.remove(oldest)
+        oldest = user_tokens.pop(0)
+        await _revoke_stream_token(oldest)
 
     token = secrets.token_urlsafe(32)
-    _stream_tokens[token] = {
+    data = {
         "user_id": user["id"],
         "user_email": user.get("email"),
         "lesson_id": lesson_id,
         "course_id": course["_id"],
         "drive_file_id": lesson.get("drive_file_id"),
-        "expires": time.time() + 300,
+        "expires": time.time() + TOKEN_TTL,
     }
-    _user_tokens.setdefault(user["id"], []).append(token)
-    return {"stream_url": f"/stream/{token}", "expires_in": 300}
+    cache = await cache_service.get_cache()
+    await cache.setex(f"stream:{token}", TOKEN_TTL, json.dumps(data))
+    user_tokens.append(token)
+    await cache.setex(f"streams:user:{user['id']}", TOKEN_TTL, json.dumps(user_tokens))
+    return {"stream_url": f"/stream/{token}", "expires_in": TOKEN_TTL}
+
+
+async def _revoke_stream_token(token: str):
+    cache = await cache_service.get_cache()
+    await cache.delete(f"stream:{token}")
 
 
 def _parse_range(range_header: str | None, total: int) -> tuple[int, int] | None:
@@ -126,7 +157,7 @@ async def _get_video_bytes(drive_file_id: str | None, user: dict, request: Reque
                 file_bytes = await get_file_bytes(drive_file_id)
             else:
                 file_bytes = await watermark_service.get_watermarked_video(
-                    drive_file_id, user["user_id"], user.get("email")
+                    drive_file_id, user["id"], user.get("email")
                 )
             if file_bytes:
                 return file_bytes
@@ -139,12 +170,12 @@ async def _get_video_bytes(drive_file_id: str | None, user: dict, request: Reque
 
 @router.get("/stream/{token}")
 async def stream_video(token: str, request: Request):
-    data = _stream_tokens.get(token)
+    data = await _get_stream_token(token)
     if not data or data["expires"] < time.time():
         raise HTTPException(status_code=403, detail="Invalid or expired stream token")
 
     drive_file_id = data.get("drive_file_id")
-    video_bytes = await _get_video_bytes(drive_file_id, {"user_id": data["user_id"], "email": data.get("user_email"), "role": "user"}, request)
+    video_bytes = await _get_video_bytes(drive_file_id, {"id": data["user_id"], "email": data.get("user_email"), "role": "user"}, request)
     total = len(video_bytes)
 
     range_header = request.headers.get("range")

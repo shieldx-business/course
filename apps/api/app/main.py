@@ -2,12 +2,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.db.mongodb import seed_db
+from app.worker import start_worker
 from app.api.v1 import courses, auth, subscriptions, reviews, admin, stream, progress, contact, blog
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await seed_db()
+    start_worker(app)
     yield
 
 

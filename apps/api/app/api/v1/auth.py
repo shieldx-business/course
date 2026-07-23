@@ -1,11 +1,14 @@
 import secrets
+import uuid
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, Request, Response, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr
 from app.db.mongodb import get_db
-from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token
+from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token
 from app.core.deps import get_current_user
 from app.core.config import settings
+from app.core.rate_limit import get_client_ip, rate_limit
 from app.services import cache as cache_service
 from app.services import otp as otp_service
 from app.services import email as email_service
@@ -24,6 +27,29 @@ def _user_payload(user: dict):
         "trial_active": user.get("trial_active", False),
         "trial_expires": user.get("trial_expires"),
     }
+
+
+def _token_payload(user: dict) -> dict:
+    return {"sub": user["_id"], "email": user["email"], "role": user["role"]}
+
+
+def _set_auth_cookies(response: Response, access_token: str, refresh_token: str):
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=False,  # Set to True in production with HTTPS
+        samesite="lax",
+        max_age=settings.jwt_access_expire_minutes * 60,
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=False,
+        samesite="lax",
+        max_age=settings.jwt_refresh_expire_days * 86400,
+    )
 
 
 class AuthIn(BaseModel):
@@ -64,7 +90,15 @@ class ProfileUpdate(BaseModel):
     name: str | None = None
 
 
-@router.post("/signup")
+async def _rate_limit_auth(request: Request):
+    await rate_limit(request, key=get_client_ip(request), limit=10, window=60)
+
+
+async def _rate_limit_login(request: Request):
+    await rate_limit(request, key=get_client_ip(request), limit=5, window=60)
+
+
+@router.post("/signup", dependencies=[Depends(_rate_limit_auth)])
 async def signup(body: AuthIn):
     db = get_db()
     if await db.users.find_one({"email": body.email}):
@@ -81,29 +115,80 @@ async def signup(body: AuthIn):
         "role": "user",
     }
     await db.users.insert_one(user)
-    token_data = {"sub": user["_id"], "email": user["email"], "role": user["role"]}
-    return {
-        "access_token": create_access_token(token_data),
-        "refresh_token": create_refresh_token(token_data),
+    token_data = _token_payload(user)
+    access = create_access_token(token_data)
+    refresh = create_refresh_token(token_data)
+    response = JSONResponse({
+        "access_token": access,
+        "refresh_token": refresh,
         "user": _user_payload(user),
-    }
+    })
+    _set_auth_cookies(response, access, refresh)
+    return response
 
 
-@router.post("/login")
+@router.post("/login", dependencies=[Depends(_rate_limit_login)])
 async def login(body: AuthIn):
     db = get_db()
     user = await db.users.find_one({"email": body.email})
     if not user or not verify_password(body.password, user.get("password_hash", "")):
         raise HTTPException(status_code=401, detail="Invalid credentials")
-    token_data = {"sub": user["_id"], "email": user["email"], "role": user["role"]}
-    return {
-        "access_token": create_access_token(token_data),
-        "refresh_token": create_refresh_token(token_data),
+    token_data = _token_payload(user)
+    access = create_access_token(token_data)
+    refresh = create_refresh_token(token_data)
+    response = JSONResponse({
+        "access_token": access,
+        "refresh_token": refresh,
         "user": _user_payload(user),
-    }
+    })
+    _set_auth_cookies(response, access, refresh)
+    return response
 
 
-@router.post("/otp/request")
+@router.post("/refresh")
+async def refresh_token(request: Request):
+    refresh_token = request.cookies.get("refresh_token")
+    if not refresh_token:
+        raise HTTPException(status_code=401, detail="Missing refresh token")
+
+    payload = decode_token(refresh_token)
+    if not payload or payload.get("type") != "refresh":
+        raise HTTPException(status_code=401, detail="Invalid refresh token")
+
+    jti = payload.get("jti")
+    cache = await cache_service.get_cache()
+    if jti and await cache.get(f"used_refresh:{jti}"):
+        raise HTTPException(status_code=401, detail="Refresh token reused")
+
+    if jti:
+        await cache.setex(f"used_refresh:{jti}", settings.jwt_refresh_expire_days * 86400, "1")
+
+    user_id = payload.get("sub")
+    db = get_db()
+    user = await db.users.find_one({"_id": user_id})
+    if not user:
+        raise HTTPException(status_code=401, detail="User not found")
+
+    token_data = _token_payload(user)
+    access = create_access_token(token_data)
+    refresh = create_refresh_token(token_data)
+    response = JSONResponse({
+        "access_token": access,
+        "refresh_token": refresh,
+        "user": _user_payload(user),
+    })
+    _set_auth_cookies(response, access, refresh)
+    return response
+
+
+@router.post("/logout")
+async def logout(response: Response):
+    response.delete_cookie("access_token")
+    response.delete_cookie("refresh_token")
+    return {"message": "Logged out"}
+
+
+@router.post("/otp/request", dependencies=[Depends(_rate_limit_auth)])
 async def request_otp(body: OTPRequest, user: dict = Depends(get_current_user)):
     cache = await cache_service.get_cache()
     code = otp_service.generate_otp()
@@ -113,7 +198,7 @@ async def request_otp(body: OTPRequest, user: dict = Depends(get_current_user)):
     return {"message": "OTP sent", "phone": sanitized}
 
 
-@router.post("/otp/verify")
+@router.post("/otp/verify", dependencies=[Depends(_rate_limit_auth)])
 async def verify_otp(body: OTPVerify, user: dict = Depends(get_current_user)):
     cache = await cache_service.get_cache()
     sanitized = "".join(c for c in body.phone if c.isdigit() or c == "+")
@@ -134,21 +219,24 @@ async def verify_otp(body: OTPVerify, user: dict = Depends(get_current_user)):
             }
         },
     )
-    await cache.delete(f"otp:{user['id']}:{sanitized}")
 
     updated = await db.users.find_one({"_id": user["id"]})
-    token_data = {"sub": updated["_id"], "email": updated["email"], "role": updated["role"]}
-    return {
+    token_data = _token_payload(updated)
+    access = create_access_token(token_data)
+    refresh = create_refresh_token(token_data)
+    response = JSONResponse({
         "verified": True,
         "trial_active": True,
         "trial_expires": trial_expires,
-        "access_token": create_access_token(token_data),
-        "refresh_token": create_refresh_token(token_data),
+        "access_token": access,
+        "refresh_token": refresh,
         "user": _user_payload(updated),
-    }
+    })
+    _set_auth_cookies(response, access, refresh)
+    return response
 
 
-@router.post("/forgot-password")
+@router.post("/forgot-password", dependencies=[Depends(_rate_limit_auth)])
 async def forgot_password(body: ForgotPasswordIn):
     db = get_db()
     user = await db.users.find_one({"email": body.email})
@@ -164,7 +252,7 @@ async def forgot_password(body: ForgotPasswordIn):
     return {"message": "If the account exists, a reset email was sent."}
 
 
-@router.post("/reset-password")
+@router.post("/reset-password", dependencies=[Depends(_rate_limit_auth)])
 async def reset_password(body: ResetPasswordIn):
     cache = await cache_service.get_cache()
     stored = await cache.get(f"pwdreset:{body.email}:{body.token}")
@@ -184,7 +272,7 @@ async def reset_password(body: ResetPasswordIn):
     return {"message": "Password updated"}
 
 
-@router.post("/google")
+@router.post("/google", dependencies=[Depends(_rate_limit_auth)])
 async def google_auth(body: GoogleAuthIn):
     from google.oauth2 import id_token
     from google.auth.transport import requests as google_requests
@@ -218,12 +306,16 @@ async def google_auth(body: GoogleAuthIn):
         }
         await db.users.insert_one(user)
 
-    token_data = {"sub": user["_id"], "email": user["email"], "role": user["role"]}
-    return {
-        "access_token": create_access_token(token_data),
-        "refresh_token": create_refresh_token(token_data),
+    token_data = _token_payload(user)
+    access = create_access_token(token_data)
+    refresh = create_refresh_token(token_data)
+    response = JSONResponse({
+        "access_token": access,
+        "refresh_token": refresh,
         "user": _user_payload(user),
-    }
+    })
+    _set_auth_cookies(response, access, refresh)
+    return response
 
 
 @router.get("/me")
