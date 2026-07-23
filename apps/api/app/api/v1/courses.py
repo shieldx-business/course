@@ -50,3 +50,29 @@ async def get_course(slug: str):
 
 def _public_syllabus(syllabus: list):
     return [{k: v for k, v in lesson.items() if k != "drive_file_id"} for lesson in syllabus]
+
+
+@router.get("/stats")
+async def public_stats():
+    db = get_db()
+    courses = await db.courses.find().to_list(1000)
+    users = await db.users.find().to_list(10000)
+    reviews = await db.reviews.find().to_list(1000)
+
+    total_courses = len(courses)
+    total_members = len(users)
+    total_hours = sum(
+        sum(lesson.get("duration_seconds", 0) for lesson in course.get("syllabus", []))
+        for course in courses
+    ) / 3600
+    avg_rating = (
+        sum(r.get("rating", 0) for r in reviews) / len(reviews)
+        if reviews else 0
+    )
+
+    return {
+        "total_courses": total_courses,
+        "total_members": total_members,
+        "total_hours": round(total_hours),
+        "average_rating": round(avg_rating, 1),
+    }

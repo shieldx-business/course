@@ -1,7 +1,25 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
-export function HeroSection() {
+interface Stats {
+  total_courses: number;
+  total_members: number;
+  total_hours: number;
+  average_rating: number;
+}
+
+async function getStats(): Promise<Stats> {
+  try {
+    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/stats`, {
+      next: { revalidate: 60 },
+    });
+    if (res.ok) return await res.json();
+  } catch {}
+  return { total_courses: 2000, total_members: 50000, total_hours: 1200000, average_rating: 4.8 };
+}
+
+export async function HeroSection() {
+  const stats = await getStats();
   return (
     <section className="bg-primary-700 py-20 text-white md:py-28">
       <div className="mx-auto max-w-page px-6 text-center">
@@ -25,7 +43,7 @@ export function HeroSection() {
           </Link>
         </div>
         <p className="mt-4 text-sm text-neutral-300">
-          2,000+ courses · 50,000+ members · 1.2M hours learned · 4.8/5 average rating
+          {stats.total_courses.toLocaleString()}+ courses · {stats.total_members.toLocaleString()}+ members · {stats.total_hours.toLocaleString()}+ hours learned · {stats.average_rating}/5 average rating
         </p>
       </div>
     </section>

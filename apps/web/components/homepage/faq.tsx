@@ -15,14 +15,14 @@ export function FAQSection() {
   ];
 
   return (
-    <section className="py-16">
+    <section className="py-16 dark:bg-neutral-900">
       <div className="mx-auto max-w-page px-6">
-        <h2 className="text-2xl font-semibold text-primary-900">Questions before you subscribe?</h2>
+        <h2 className="text-2xl font-semibold text-primary-900 dark:text-white">Questions before you subscribe?</h2>
         <dl className="mt-8 space-y-4">
           {items.map((item) => (
-            <div key={item.q} className="rounded-lg border border-neutral-300 p-6">
-              <dt className="font-medium text-neutral-900">{item.q}</dt>
-              <dd className="mt-2 text-sm text-neutral-600">{item.a}</dd>
+            <div key={item.q} className="rounded-lg border border-neutral-300 bg-white p-6 dark:border-neutral-700 dark:bg-neutral-800">
+              <dt className="font-medium text-neutral-900 dark:text-neutral-100">{item.q}</dt>
+              <dd className="mt-2 text-sm text-neutral-600 dark:text-neutral-300">{item.a}</dd>
             </div>
           ))}
         </dl>

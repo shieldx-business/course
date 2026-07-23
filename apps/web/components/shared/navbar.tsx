@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Menu, X } from "lucide-react";
+import { Menu, X, Moon, Sun } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
+import { useTheme } from "@/components/theme-provider";
 
 const links = [
   { href: "/courses", label: "Courses" },
@@ -17,6 +18,7 @@ const links = [
 export function Navbar() {
   const [open, setOpen] = useState(false);
   const { user, logout } = useAuth();
+  const { theme, toggle } = useTheme();
 
   return (
     <header className="sticky top-0 z-50 bg-primary-700 text-white">
@@ -36,6 +38,13 @@ export function Navbar() {
         </ul>
 
         <div className="hidden items-center gap-3 md:flex">
+          <button
+            onClick={toggle}
+            className="rounded-md p-2 hover:bg-white/10"
+            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {theme === "dark" ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+          </button>
           {user ? (
             <>
               <Link href="/account">
@@ -87,6 +96,12 @@ export function Navbar() {
                 <Link href={l.href}>{l.label}</Link>
               </li>
             ))}
+            <li>
+              <button onClick={toggle} className="flex items-center gap-2">
+                {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+                {theme === "dark" ? "Light mode" : "Dark mode"}
+              </button>
+            </li>
             {user ? (
               <>
                 <li><Link href="/account">Account</Link></li>
