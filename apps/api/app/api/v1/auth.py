@@ -30,7 +30,12 @@ async def signup(body: AuthIn):
         "role": "user",
     }
     await db.users.insert_one(user)
-    return {"id": user["_id"], "email": user["email"], "role": user["role"]}
+    token_data = {"sub": user["_id"], "email": user["email"], "role": user["role"]}
+    return {
+        "access_token": create_access_token(token_data),
+        "refresh_token": create_refresh_token(token_data),
+        "user": {"id": user["_id"], "email": user["email"], "role": user["role"]},
+    }
 
 
 @router.post("/login")
