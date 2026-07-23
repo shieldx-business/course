@@ -15,10 +15,17 @@ export async function generateMetadata({ params }: { params: { course: string } 
     if (res.ok) course = await res.json();
   } catch {}
 
+  const outcome = course?.outcome?.[0] ? `Learn ${course.outcome[0].toLowerCase().replace(/^[a-z]/, (c) => c.toUpperCase())}` : "Learn this skill";
+  const title = course ? `${course.title} Course Online | Ascendly` : `${params.course} | Ascendly`;
+  const description = course
+    ? `${outcome} with ${course.title} — part of Ascendly's full course library. ${course.lesson_count} lessons, included in every plan.`
+    : "Learn this skill with Ascendly.";
+
   return makeMetadata({
-    title: `${course?.title || params.course} — Ascendly Course`,
-    description: course?.description || "Learn this skill with Ascendly.",
+    title,
+    description,
     path: `/courses/${course?.category_slug || "category"}/${course?.slug || params.course}`,
+    image: course?.thumbnail_url ? `${SITE_URL}${course.thumbnail_url}` : undefined,
   });
 }
 

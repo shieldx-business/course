@@ -13,9 +13,10 @@ export async function generateMetadata({ params }: { params: { category: string 
     if (res.ok) category = await res.json();
   } catch {}
 
+  const count = category?.course_count || 0;
   return makeMetadata({
-    title: `${category?.name || params.category} Courses — Ascendly`,
-    description: `Browse ${category?.name || params.category} courses included with every Ascendly membership.`,
+    title: `${category?.name || params.category} Courses Online — ${count}+ Courses | Ascendly`,
+    description: `Browse ${count}+ ${category?.name || params.category} courses included with every Ascendly membership. From beginner to advanced. Preview free.`,
     path: `/courses/${params.category}`,
   });
 }

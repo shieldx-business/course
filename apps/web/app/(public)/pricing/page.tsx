@@ -53,9 +53,25 @@ export default async function PricingPage() {
     })),
   };
 
+  const faqItems = [
+    { q: "Can I cancel my subscription?", a: "Yes. Monthly, 3-month, 6-month, and 12-month plans can be cancelled anytime. You keep access until the end of your billing period." },
+    { q: "Do you offer refunds?", a: "We offer a 7-day money-back guarantee, no questions asked, one time per account." },
+    { q: "Are all courses included?", a: "Every plan includes unlimited access to the full library of 2,000+ courses across all categories." },
+  ];
+
+  const faqSchema = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: faqItems.map((item) => ({
+      "@type": "Question",
+      name: item.q,
+      acceptedAnswer: { "@type": "Answer", text: item.a },
+    })),
+  };
+
   return (
     <>
-      <JsonLd data={productSchema} />
+      <JsonLd data={[productSchema, faqSchema]} />
       <section className="py-16">
         <div className="mx-auto max-w-page px-6 text-center">
           <h1 className="text-3xl font-semibold text-primary-900">Simple pricing. No per-course surprises.</h1>
@@ -106,6 +122,18 @@ export default async function PricingPage() {
             <span className="flex items-center gap-1"><Shield className="h-4 w-4" /> 7-day money-back guarantee</span>
             <span>Cancel anytime</span>
             <span>Secure checkout via Stripe and PayPal</span>
+          </div>
+
+          <div className="mx-auto mt-16 max-w-3xl text-left">
+            <h2 className="text-center text-2xl font-semibold text-primary-900">Questions before you subscribe?</h2>
+            <dl className="mt-8 space-y-4">
+              {faqItems.map((item) => (
+                <div key={item.q} className="rounded-lg border border-neutral-300 p-6">
+                  <dt className="font-medium text-neutral-900">{item.q}</dt>
+                  <dd className="mt-2 text-sm text-neutral-600">{item.a}</dd>
+                </div>
+              ))}
+            </dl>
           </div>
         </div>
       </section>

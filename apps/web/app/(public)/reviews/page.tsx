@@ -1,27 +1,53 @@
-import { Review } from "@/types";
+import { Review, Category } from "@/types";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Star } from "lucide-react";
 import { JsonLd } from "@/components/json-ld";
 import { makeMetadata, SITE_URL } from "@/lib/metadata";
 
-export const metadata = makeMetadata({
-  title: "Member Reviews — What Ascendly Students Say",
-  description:
-    "See real member reviews and outcomes from Ascendly students across business, tech, design, and data skills.",
-  path: "/reviews",
-});
+const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-export default async function ReviewsPage() {
+export async function generateMetadata({ searchParams }: { searchParams?: { [key: string]: string | string[] | undefined } }) {
+  const category = typeof searchParams?.category === "string" ? searchParams.category : "";
+  const title = category ? `${category} Reviews — Ascendly Member Outcomes` : "Member Reviews — What Ascendly Students Say";
+  return makeMetadata({
+    title,
+    description:
+      "See real member reviews and outcomes from Ascendly students across business, tech, design, and data skills.",
+    path: "/reviews",
+  });
+}
+
+export default async function ReviewsPage({
+  searchParams,
+}: {
+  searchParams?: { [key: string]: string | string[] | undefined };
+}) {
+  const search = typeof searchParams?.search === "string" ? searchParams.search : "";
+  const jobTitle = typeof searchParams?.job_title === "string" ? searchParams.job_title : "";
+  const category = typeof searchParams?.category === "string" ? searchParams.category : "";
+
+  const query = new URLSearchParams();
+  if (search) query.set("search", search);
+  if (jobTitle) query.set("job_title", jobTitle);
+  if (category) query.set("category", category);
+
   let reviews: Review[] = [];
+  let categories: Category[] = [];
   try {
-    const res = await fetch(
-      `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/reviews`,
-      { next: { revalidate: 60 } }
-    );
-    if (res.ok) reviews = await res.json();
+    const [reviewsRes, catsRes] = await Promise.all([
+      fetch(`${apiBase}/api/v1/reviews${query.toString() ? `?${query.toString()}` : ""}`, { next: { revalidate: 60 } }),
+      fetch(`${apiBase}/api/v1/categories`, { next: { revalidate: 60 } }),
+    ]);
+    if (reviewsRes.ok) reviews = await reviewsRes.json();
+    if (catsRes.ok) categories = await catsRes.json();
   } catch {
     reviews = [];
+    categories = [];
   }
+
+  const jobTitles = Array.from(new Set(reviews.map((r) => r.job_title || r.role).filter(Boolean)));
 
   const average = reviews.length
     ? (reviews.reduce((sum, r) => sum + (r.rating || 5), 0) / reviews.length).toFixed(1)
@@ -65,6 +91,36 @@ export default async function ReviewsPage() {
         <div className="mx-auto max-w-page px-6">
           <h1 className="text-3xl font-semibold text-primary-900">Member reviews</h1>
           <p className="mt-2 text-neutral-600">Average rating: {average}/5 from {reviews.length} verified members.</p>
+
+          <form method="GET" action="/reviews" className="mt-6 flex flex-col gap-3 sm:flex-row">
+            <Input name="search" defaultValue={search} placeholder="Search reviews..." className="flex-1" />
+            <select
+              name="job_title"
+              defaultValue={jobTitle}
+              className="h-10 rounded-md border border-neutral-300 bg-white px-3 text-sm text-neutral-900"
+            >
+              <option value="">All job titles</option>
+              {jobTitles.map((jt) => (
+                <option key={jt} value={jt}>
+                  {jt}
+                </option>
+              ))}
+            </select>
+            <select
+              name="category"
+              defaultValue={category}
+              className="h-10 rounded-md border border-neutral-300 bg-white px-3 text-sm text-neutral-900"
+            >
+              <option value="">All categories</option>
+              {categories.map((c) => (
+                <option key={c.id} value={c.name}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+            <Button type="submit">Filter</Button>
+          </form>
+
           <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {reviews.map((r) => (
               <Card key={r.id} className="p-6">
@@ -82,7 +138,7 @@ export default async function ReviewsPage() {
                   <p className="mt-2 text-sm text-neutral-600">Outcome: {r.outcome}</p>
                 )}
                 <p className="mt-4 text-sm font-medium text-neutral-900">{r.name}</p>
-                <p className="text-xs text-neutral-600">{r.job_title || r.role}</p>
+                <p className="text-xs text-neutral-600">{r.job_title || r.role}{r.category_name ? ` · ${r.category_name}` : ""}</p>
               </Card>
             ))}
           </div>

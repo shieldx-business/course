@@ -63,6 +63,9 @@ export interface Review {
   outcome: string;
   rating?: number;
   verified?: boolean;
+  category_id?: string;
+  category_name?: string;
+  course_title?: string;
 }
 
 export interface Progress {
