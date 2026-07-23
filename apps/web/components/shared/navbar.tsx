@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Menu, X } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
 
 const links = [
   { href: "/courses", label: "Courses" },
@@ -15,6 +16,7 @@ const links = [
 
 export function Navbar() {
   const [open, setOpen] = useState(false);
+  const { user, logout } = useAuth();
 
   return (
     <header className="sticky top-0 z-50 bg-primary-700 text-white">
@@ -34,16 +36,38 @@ export function Navbar() {
         </ul>
 
         <div className="hidden items-center gap-3 md:flex">
-          <Link href="/login">
-            <Button variant="ghost" className="text-white hover:text-white hover:bg-white/10">
-              Log in
-            </Button>
-          </Link>
-          <Link href="/pricing">
-            <Button variant="primary" className="bg-accent-500 text-white hover:bg-accent-600">
-              Start learning
-            </Button>
-          </Link>
+          {user ? (
+            <>
+              <Link href="/account">
+                <Button variant="ghost" className="text-white hover:text-white hover:bg-white/10">
+                  Account
+                </Button>
+              </Link>
+              {user.role === "admin" && (
+                <Link href="/admin">
+                  <Button variant="ghost" className="text-white hover:text-white hover:bg-white/10">
+                    Admin
+                  </Button>
+                </Link>
+              )}
+              <Button variant="primary" className="bg-accent-500 text-white hover:bg-accent-600" onClick={logout}>
+                Log out
+              </Button>
+            </>
+          ) : (
+            <>
+              <Link href="/login">
+                <Button variant="ghost" className="text-white hover:text-white hover:bg-white/10">
+                  Log in
+                </Button>
+              </Link>
+              <Link href="/pricing">
+                <Button variant="primary" className="bg-accent-500 text-white hover:bg-accent-600">
+                  Start learning
+                </Button>
+              </Link>
+            </>
+          )}
         </div>
 
         <button
@@ -63,14 +87,18 @@ export function Navbar() {
                 <Link href={l.href}>{l.label}</Link>
               </li>
             ))}
-            <li>
-              <Link href="/login">Log in</Link>
-            </li>
-            <li>
-              <Link href="/pricing" className="text-accent-500">
-                Start learning
-              </Link>
-            </li>
+            {user ? (
+              <>
+                <li><Link href="/account">Account</Link></li>
+                {user.role === "admin" && <li><Link href="/admin">Admin</Link></li>}
+                <li><button onClick={logout}>Log out</button></li>
+              </>
+            ) : (
+              <>
+                <li><Link href="/login">Log in</Link></li>
+                <li><Link href="/pricing" className="text-accent-500">Start learning</Link></li>
+              </>
+            )}
           </ul>
         </div>
       )}

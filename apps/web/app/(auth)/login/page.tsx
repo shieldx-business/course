@@ -7,13 +7,14 @@ import { Card } from "@/components/ui/card";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api-client";
-import { setToken } from "@/lib/auth";
+import { useAuth } from "@/lib/auth-context";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const router = useRouter();
+  const { login } = useAuth();
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,7 +24,7 @@ export default function LoginPage() {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
-      setToken(data.access_token);
+      login(data.access_token, data.user);
       router.push("/learn");
     } catch (err: any) {
       setError(err.message);

@@ -5,7 +5,7 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { apiFetch } from "@/lib/api-client";
 import { Button } from "@/components/ui/button";
-import { removeToken } from "@/lib/auth";
+import { useAuth } from "@/lib/auth-context";
 import { useRouter } from "next/navigation";
 
 interface Subscription {
@@ -18,6 +18,7 @@ interface Subscription {
 
 export default function AccountPage() {
   const router = useRouter();
+  const { logout } = useAuth();
   const [sub, setSub] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -28,8 +29,8 @@ export default function AccountPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  const logout = () => {
-    removeToken();
+  const handleLogout = () => {
+    logout();
     router.push("/login");
   };
 
@@ -57,7 +58,7 @@ export default function AccountPage() {
           )}
         </Card>
 
-        <Button variant="secondary" className="mt-6" onClick={logout}>Log out</Button>
+        <Button variant="secondary" className="mt-6" onClick={handleLogout}>Log out</Button>
       </div>
     </section>
   );
