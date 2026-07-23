@@ -8,6 +8,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
+import { GoogleLogin } from "@react-oauth/google";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -23,6 +24,20 @@ export default function LoginPage() {
       const data = await apiFetch("/auth/login", {
         method: "POST",
         body: JSON.stringify({ email, password }),
+      });
+      login(data.access_token, data.user);
+      router.push("/learn");
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const handleGoogle = async (credentialResponse: any) => {
+    if (!credentialResponse?.credential) return;
+    try {
+      const data = await apiFetch("/auth/google", {
+        method: "POST",
+        body: JSON.stringify({ token: credentialResponse.credential }),
       });
       login(data.access_token, data.user);
       router.push("/learn");
@@ -47,7 +62,16 @@ export default function LoginPage() {
           {error && <p className="text-sm text-error">{error}</p>}
           <Button type="submit" className="w-full">Log in</Button>
         </form>
+
+        <div className="my-4 text-center text-sm text-neutral-600">or</div>
+        <div className="flex justify-center">
+          <GoogleLogin onSuccess={handleGoogle} onError={() => setError("Google sign-in failed")} text="signin_with" />
+        </div>
+
         <p className="mt-4 text-center text-sm text-neutral-600">
+          <Link href="/forgot-password" className="text-primary-700 hover:underline">Forgot password?</Link>
+        </p>
+        <p className="mt-2 text-center text-sm text-neutral-600">
           Don&apos;t have an account? <Link href="/signup" className="text-primary-700 hover:underline">Sign up</Link>
         </p>
       </Card>

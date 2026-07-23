@@ -10,6 +10,7 @@ router = APIRouter()
 class ProgressUpdate(BaseModel):
     completed: bool = False
     last_position_seconds: int = 0
+    note: str | None = None
 
 
 @router.get("/progress")
@@ -17,6 +18,15 @@ async def list_progress(user: dict = Depends(get_current_user)):
     db = get_db()
     progress = await db.progress.find({"user_id": user["id"]}).to_list(1000)
     return [{"id": p["_id"], **{k: v for k, v in p.items() if k != "_id"}} for p in progress]
+
+
+@router.get("/progress/{lesson_id}")
+async def get_progress(lesson_id: str, user: dict = Depends(get_current_user)):
+    db = get_db()
+    record = await db.progress.find_one({"_id": f"prog-{user['id']}-{lesson_id}"})
+    if not record:
+        return None
+    return {"id": record["_id"], **{k: v for k, v in record.items() if k != "_id"}}
 
 
 @router.put("/progress/{lesson_id}")
@@ -36,18 +46,23 @@ async def update_progress(lesson_id: str, body: ProgressUpdate, user: dict = Dep
         raise HTTPException(status_code=404, detail="Lesson not found")
 
     progress_id = f"prog-{user['id']}-{lesson_id}"
+    existing = await db.progress.find_one({"_id": progress_id}) or {}
+    update_fields = {
+        "user_id": user["id"],
+        "course_id": course["_id"],
+        "lesson_id": lesson_id,
+        "completed": body.completed,
+        "last_position_seconds": body.last_position_seconds,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if body.note is not None:
+        update_fields["note"] = body.note
+    elif "note" in existing:
+        update_fields["note"] = existing["note"]
+
     await db.progress.update_one(
         {"_id": progress_id},
-        {
-            "$set": {
-                "user_id": user["id"],
-                "course_id": course["_id"],
-                "lesson_id": lesson_id,
-                "completed": body.completed,
-                "last_position_seconds": body.last_position_seconds,
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }
-        },
+        {"$set": update_fields},
         upsert=True,
     )
     record = await db.progress.find_one({"_id": progress_id})

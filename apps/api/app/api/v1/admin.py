@@ -9,11 +9,17 @@ from app.services import ai
 router = APIRouter()
 
 
+class AttachmentIn(BaseModel):
+    title: str
+    url: str
+
+
 class LessonIn(BaseModel):
     title: str
     order: int
     duration_seconds: int
     drive_file_id: str | None = None
+    attachments: List[AttachmentIn] = Field(default_factory=list)
 
 
 class CourseIn(BaseModel):

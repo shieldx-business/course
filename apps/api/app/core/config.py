@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     from_email: str = "noreply@ascendly.io"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
+    google_oauth_client_id: str = ""
+    google_oauth_client_secret: str = ""
 
     class Config:
         env_file = ".env"

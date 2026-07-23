@@ -69,6 +69,16 @@ def send_trial_started(to: str, expires_at: str):
     _send(to, subject, body)
 
 
+def send_password_reset(to: str, reset_url: str):
+    subject = "Reset your Ascendly password"
+    body = (
+        f"You requested a password reset. Click the link below to set a new password:\n\n"
+        f"{reset_url}\n\n"
+        f"This link expires in 15 minutes. If you did not request this, you can ignore this email."
+    )
+    _send(to, subject, body)
+
+
 async def find_renewals_due(db, days: int = 7):
     from datetime import timedelta
 

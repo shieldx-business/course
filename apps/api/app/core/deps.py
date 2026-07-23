@@ -22,6 +22,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials | None = De
     return {
         "id": user["_id"],
         "email": user["email"],
+        "name": user.get("name") or "",
         "role": user["role"],
         "phone": user.get("phone"),
         "phone_verified": user.get("phone_verified", False),

@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Check, Lock } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Check, Lock, Paperclip } from "lucide-react";
 import { apiFetch } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { Course, Lesson, Progress } from "@/types";
@@ -25,6 +26,10 @@ export default function CoursePlayerPage({ params }: { params: { course: string;
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [note, setNote] = useState("");
+  const [savingNote, setSavingNote] = useState(false);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const lastUpdateRef = useRef<number>(0);
 
   useEffect(() => {
     setLoading(true);
@@ -49,6 +54,14 @@ export default function CoursePlayerPage({ params }: { params: { course: string;
   const current: Lesson | undefined = course?.syllabus.find((l) => l.id === params.lesson);
   const currentIndex = course?.syllabus.findIndex((l) => l.id === params.lesson) ?? 0;
 
+  useEffect(() => {
+    if (current && progress[current.id]?.note) {
+      setNote(progress[current.id].note || "");
+    } else {
+      setNote("");
+    }
+  }, [current, progress]);
+
   const trialActive = !!user?.trial_active && !!user?.trial_expires && new Date(user.trial_expires) > new Date();
   const trialUnlockCount = course ? Math.max(1, Math.ceil(course.syllabus.length * 0.1)) : 0;
 
@@ -70,7 +83,7 @@ export default function CoursePlayerPage({ params }: { params: { course: string;
       .catch((e) => setError(e.message));
   }, [current, currentIndex, hasAccess]);
 
-  const updateProgress = (completed: boolean, last_position_seconds: number) => {
+  const updateProgress = useCallback((completed: boolean, last_position_seconds: number) => {
     if (!current) return;
     apiFetch(`/progress/${current.id}`, {
       method: "PUT",
@@ -78,6 +91,27 @@ export default function CoursePlayerPage({ params }: { params: { course: string;
     }).then((p: Progress) => {
       setProgress((prev) => ({ ...prev, [current.id]: p }));
     });
+  }, [current]);
+
+  const throttledProgress = (completed: boolean, position: number) => {
+    const now = Date.now();
+    if (now - lastUpdateRef.current > 5000 || completed) {
+      lastUpdateRef.current = now;
+      updateProgress(completed, position);
+    }
+  };
+
+  const saveNote = async () => {
+    if (!current) return;
+    setSavingNote(true);
+    try {
+      const p = await apiFetch(`/progress/${current.id}`, {
+        method: "PUT",
+        body: JSON.stringify({ completed: progress[current.id]?.completed || false, last_position_seconds: progress[current.id]?.last_position_seconds || 0, note }),
+      });
+      setProgress((prev) => ({ ...prev, [current.id]: p }));
+    } catch {}
+    setSavingNote(false);
   };
 
   const isLocked = (lesson: Lesson) => {
@@ -119,17 +153,22 @@ export default function CoursePlayerPage({ params }: { params: { course: string;
     );
   }
 
+  const currentProgress = progress[current.id];
+  const startPosition = currentProgress?.last_position_seconds || 0;
+
   return (
     <section className="py-6">
       <div className="mx-auto max-w-page px-6">
         <div className="grid gap-6 lg:grid-cols-3">
-          <div className="lg:col-span-2">
+          <div className="lg:col-span-2 space-y-4">
             <div className="aspect-video rounded-lg bg-neutral-900 flex items-center justify-center overflow-hidden">
               {videoUrl ? (
                 <video
+                  ref={videoRef}
                   src={videoUrl}
                   controls
                   controlsList="nodownload"
+                  playsInline
                   className="h-full w-full select-none"
                   onContextMenu={(e) => e.preventDefault()}
                   onKeyDown={(e) => {
@@ -137,17 +176,49 @@ export default function CoursePlayerPage({ params }: { params: { course: string;
                       e.preventDefault();
                     }
                   }}
-                  onTimeUpdate={(e) => updateProgress(false, Math.floor(e.currentTarget.currentTime))}
+                  onLoadedMetadata={(e) => {
+                    if (startPosition > 0) {
+                      e.currentTarget.currentTime = startPosition;
+                    }
+                  }}
+                  onTimeUpdate={(e) => throttledProgress(false, Math.floor(e.currentTarget.currentTime))}
+                  onPause={(e) => updateProgress(false, Math.floor(e.currentTarget.currentTime))}
                   onEnded={() => updateProgress(true, 0)}
                 />
               ) : (
                 <p className="text-center text-neutral-300">{error || "Loading video..."}</p>
               )}
             </div>
-            <h1 className="mt-4 text-2xl font-semibold text-primary-900">{current.title}</h1>
-            <p className="mt-2 text-sm text-neutral-600">
+            <h1 className="text-2xl font-semibold text-primary-900">{current.title}</h1>
+            <p className="text-sm text-neutral-600">
               Lesson {currentIndex + 1} of {course.lesson_count}
             </p>
+
+            {current.attachments && current.attachments.length > 0 && (
+              <Card className="p-5">
+                <h2 className="flex items-center gap-2 font-semibold text-primary-900"><Paperclip className="h-4 w-4" /> Attachments</h2>
+                <ul className="mt-3 space-y-2">
+                  {current.attachments.map((a, i) => (
+                    <li key={i}>
+                      <a href={a.url} target="_blank" rel="noopener noreferrer" className="text-sm text-primary-700 hover:underline">
+                        {a.title}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            )}
+
+            <Card className="p-5">
+              <h2 className="font-semibold text-primary-900">My notes</h2>
+              <Textarea
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Write a note for this lesson..."
+                className="mt-3 min-h-[100px]"
+              />
+              <Button className="mt-3" onClick={saveNote} disabled={savingNote}>{savingNote ? "Saving..." : "Save note"}</Button>
+            </Card>
           </div>
           <Card className="h-fit p-5">
             <h2 className="font-semibold text-primary-900">{course.title}</h2>

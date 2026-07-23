@@ -6,11 +6,17 @@ export interface Category {
   course_count: number;
 }
 
+export interface Attachment {
+  title: string;
+  url: string;
+}
+
 export interface Lesson {
   id: string;
   title: string;
   order: number;
   duration_seconds: number;
+  attachments?: Attachment[];
 }
 
 export interface Course {
@@ -29,8 +35,12 @@ export interface Course {
 export interface User {
   id: string;
   email: string;
+  name?: string;
   role: "user" | "admin";
   subscription_status?: string;
+  phone_verified?: boolean;
+  trial_active?: boolean;
+  trial_expires?: string;
 }
 
 export interface SubscriptionTier {
@@ -58,5 +68,6 @@ export interface Progress {
   lesson_id: string;
   completed: boolean;
   last_position_seconds: number;
+  note?: string;
   updated_at: string;
 }
