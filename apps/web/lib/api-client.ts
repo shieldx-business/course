@@ -1,6 +1,9 @@
 import { getToken } from "./auth";
 
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL || "";
+const API_PREFIX = "/api/v1";
+
+export const API_BASE = API_ORIGIN || "";
 
 export async function apiFetch(path: string, options: RequestInit = {}) {
   const token = getToken();
@@ -12,7 +15,8 @@ export async function apiFetch(path: string, options: RequestInit = {}) {
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const res = await fetch(`${API_BASE}${path}`, {
+  const url = `${API_ORIGIN}${API_PREFIX}${path}`;
+  const res = await fetch(url, {
     ...options,
     headers,
   });

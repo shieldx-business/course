@@ -37,7 +37,7 @@ export default function CoursePlayerPage({ params }: { params: { course: string;
   useEffect(() => {
     if (!lessonId) return;
     apiFetch(`/lessons/${lessonId}/stream-token`, { method: "POST" })
-      .then((data) => setVideoUrl(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}${data.stream_url}`))
+      .then((data) => setVideoUrl(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/v1${data.stream_url}`))
       .catch((e) => setError(e.message));
   }, [lessonId]);
 

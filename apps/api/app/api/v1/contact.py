@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from app.core.deps import require_admin
 from app.db.mongodb import get_db
 
 router = APIRouter()
@@ -29,7 +30,7 @@ async def submit_contact(body: ContactIn):
     return {"success": True, "id": contact_id}
 
 
-@router.get("/admin/contacts")
+@router.get("/admin/contacts", dependencies=[Depends(require_admin)])
 async def list_contacts():
     db = get_db()
     contacts = await db.contacts.find().to_list(1000)

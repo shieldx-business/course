@@ -53,7 +53,7 @@ async def create_stream_token(lesson_id: str, user: dict = Depends(get_current_u
         "drive_file_id": lesson.get("drive_file_id"),
         "expires": time.time() + 300,
     }
-    return {"stream_url": f"/api/v1/stream/{token}", "expires_in": 300}
+    return {"stream_url": f"/stream/{token}", "expires_in": 300}
 
 
 @router.get("/stream/{token}")
