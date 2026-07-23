@@ -1,17 +1,10 @@
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
 from app.core.deps import require_admin
+from app.models import ContactIn
 from app.db.mongodb import get_db
 
 router = APIRouter()
-
-
-class ContactIn(BaseModel):
-    name: str
-    email: str
-    subject: str
-    message: str
 
 
 @router.post("/contact")

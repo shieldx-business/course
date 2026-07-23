@@ -1,16 +1,10 @@
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
 from app.core.deps import get_current_user
+from app.models import ProgressUpdate
 from app.db.mongodb import get_db
 
 router = APIRouter()
-
-
-class ProgressUpdate(BaseModel):
-    completed: bool = False
-    last_position_seconds: int = 0
-    note: str | None = None
 
 
 @router.get("/progress")

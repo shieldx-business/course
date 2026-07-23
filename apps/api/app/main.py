@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.db.mongodb import seed_db
 from app.worker import start_worker, stop_worker
-from app.api.v1 import courses, auth, subscriptions, reviews, admin, stream, progress, contact, blog
+from app.api.v1 import courses, auth, subscriptions, reviews, admin, stream, progress, contact, blog, checkout, webhooks
 
 
 @asynccontextmanager
@@ -35,6 +35,8 @@ app.include_router(stream.router, prefix="/api/v1", tags=["stream"])
 app.include_router(progress.router, prefix="/api/v1", tags=["progress"])
 app.include_router(contact.router, prefix="/api/v1", tags=["contact"])
 app.include_router(blog.router, prefix="/api/v1", tags=["blog"])
+app.include_router(checkout.router, prefix="/api/v1", tags=["checkout"])
+app.include_router(webhooks.router, prefix="/api/v1", tags=["webhooks"])
 
 
 @app.get("/api/v1/health")

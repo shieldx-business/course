@@ -53,6 +53,24 @@ export interface SubscriptionTier {
   recommended?: boolean;
 }
 
+export interface Subscription {
+  id: string;
+  tier: string;
+  status: string;
+  starts_at: string;
+  ends_at: string;
+}
+
+export interface Order {
+  id: string;
+  subscription_id: string;
+  amount: number;
+  currency: string;
+  payment_provider: string;
+  payment_status: string;
+  created_at: string;
+}
+
 export interface Review {
   id: string;
   name: string;

@@ -3,8 +3,17 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, HTTPException, Depends, Request, Response, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, EmailStr
 from app.db.mongodb import get_db
+from app.models import (
+    AuthIn,
+    ChangePasswordIn,
+    ForgotPasswordIn,
+    GoogleAuthIn,
+    OTPRequest,
+    OTPVerify,
+    ProfileUpdate,
+    ResetPasswordIn,
+)
 from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token, decode_token
 from app.core.deps import get_current_user
 from app.core.config import settings
@@ -50,44 +59,6 @@ def _set_auth_cookies(response: Response, access_token: str, refresh_token: str)
         samesite="lax",
         max_age=settings.jwt_refresh_expire_days * 86400,
     )
-
-
-class AuthIn(BaseModel):
-    email: EmailStr
-    password: str
-    name: str | None = None
-
-
-class OTPRequest(BaseModel):
-    phone: str
-
-
-class OTPVerify(BaseModel):
-    phone: str
-    code: str
-
-
-class ForgotPasswordIn(BaseModel):
-    email: EmailStr
-
-
-class ResetPasswordIn(BaseModel):
-    email: EmailStr
-    token: str
-    new_password: str
-
-
-class GoogleAuthIn(BaseModel):
-    token: str
-
-
-class ChangePasswordIn(BaseModel):
-    old_password: str
-    new_password: str
-
-
-class ProfileUpdate(BaseModel):
-    name: str | None = None
 
 
 async def _rate_limit_auth(request: Request):

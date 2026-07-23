@@ -1,8 +1,15 @@
 from datetime import datetime, timezone, timedelta
-from typing import List
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
 from app.core.deps import require_admin
+from app.models import (
+    AttachmentIn,
+    CourseIn,
+    CouponIn,
+    DriveMapIn,
+    LessonIn,
+    SubscriptionOverrideIn,
+    UserUpdateIn,
+)
 from app.core.config import settings
 from app.db.mongodb import get_db
 from app.services import ai
@@ -11,45 +18,6 @@ from app.services import drive as drive_service
 from app.services import cache as cache_service
 
 router = APIRouter()
-
-
-class AttachmentIn(BaseModel):
-    title: str
-    url: str
-
-
-class LessonIn(BaseModel):
-    id: str | None = None
-    title: str
-    order: int
-    duration_seconds: int
-    drive_file_id: str | None = None
-    attachments: List[AttachmentIn] = Field(default_factory=list)
-
-
-class CourseIn(BaseModel):
-    category_id: str
-    title: str
-    slug: str
-    description: str
-    syllabus: List[LessonIn] = Field(default_factory=list)
-    outcome: List[str] = Field(default_factory=list)
-
-
-class UserUpdateIn(BaseModel):
-    name: str | None = None
-    role: str | None = None
-
-
-class SubscriptionOverrideIn(BaseModel):
-    tier_id: str
-    duration_months: int | None = None
-    ends_at: str | None = None
-    status: str = "active"
-
-
-class DriveMapIn(BaseModel):
-    drive_file_id: str
 
 
 @router.get("/dashboard", dependencies=[Depends(require_admin)])
@@ -431,14 +399,6 @@ async def list_coupons():
     db = get_db()
     coupons = await db.coupons.find().to_list(1000)
     return [{"id": c["_id"], **{k: v for k, v in c.items() if k != "_id"}} for c in coupons]
-
-
-class CouponIn(BaseModel):
-    code: str
-    discount_type: str = "percent"
-    discount_value: float
-    max_uses: int | None = None
-    expires_at: str | None = None
 
 
 @router.post("/coupons", dependencies=[Depends(require_admin)])
