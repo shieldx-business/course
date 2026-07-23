@@ -2,6 +2,14 @@ import { Check } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
+import { makeMetadata } from "@/lib/metadata";
+
+export const metadata = makeMetadata({
+  title: "Ascendly Membership — Unlimited Access to 2,000+ Courses",
+  description:
+    "One membership unlocks 2,000+ expert-led courses, structured learning paths, and progress tracking across devices.",
+  path: "/membership",
+});
 
 const features = [
   "Unlimited access to 2,000+ courses",

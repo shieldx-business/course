@@ -4,6 +4,14 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Course, Category } from "@/types";
+import { makeMetadata } from "@/lib/metadata";
+
+export const metadata = makeMetadata({
+  title: "Course Library — 2,000+ Courses Included | Ascendly",
+  description:
+    "Browse 2,000+ expert-led courses in business, tech, design, data, AI, and career skills. Included with every Ascendly membership.",
+  path: "/courses",
+});
 
 export default async function CoursesPage({
   searchParams,
@@ -13,7 +21,7 @@ export default async function CoursesPage({
   const search = typeof searchParams.search === "string" ? searchParams.search : "";
   const category = typeof searchParams.category === "string" ? searchParams.category : "";
 
-  const apiBase = process.env.API_BASE_URL || "http://localhost:8000";
+  const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
   let courses: Course[] = [];
   let categories: Category[] = [];
 

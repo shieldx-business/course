@@ -1,3 +1,12 @@
+import { makeMetadata } from "@/lib/metadata";
+
+export const metadata = makeMetadata({
+  title: "About Ascendly — One Membership for Career Skills",
+  description:
+    "Ascendly bundles expert-led courses across business, tech, design, data, AI, and career skills into one membership.",
+  path: "/about",
+});
+
 export default function AboutPage() {
   return (
     <section className="py-16">

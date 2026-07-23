@@ -1,3 +1,13 @@
+import { JsonLd } from "@/components/json-ld";
+import { makeMetadata, SITE_URL } from "@/lib/metadata";
+
+export const metadata = makeMetadata({
+  title: "FAQ — Ascendly Membership Questions",
+  description:
+    "Find answers about Ascendly memberships, free previews, refunds, cancellations, and course access.",
+  path: "/faq",
+});
+
 export default function FAQPage() {
   const items = [
     {
@@ -18,19 +28,44 @@ export default function FAQPage() {
     },
   ];
 
+  const faqSchema = {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    mainEntity: items.map((item) => ({
+      "@type": "Question",
+      name: item.q,
+      acceptedAnswer: {
+        "@type": "Answer",
+        text: item.a,
+      },
+    })),
+  };
+
+  const breadcrumb = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Home", item: SITE_URL },
+      { "@type": "ListItem", position: 2, name: "FAQ", item: `${SITE_URL}/faq` },
+    ],
+  };
+
   return (
-    <section className="py-16">
-      <div className="mx-auto max-w-page px-6 max-w-3xl">
-        <h1 className="text-3xl font-semibold text-primary-900">Frequently asked questions</h1>
-        <dl className="mt-8 space-y-4">
-          {items.map((item) => (
-            <div key={item.q} className="rounded-lg border border-neutral-300 p-6">
-              <dt className="font-medium text-neutral-900">{item.q}</dt>
-              <dd className="mt-2 text-sm text-neutral-600">{item.a}</dd>
-            </div>
-          ))}
-        </dl>
-      </div>
-    </section>
+    <>
+      <JsonLd data={[faqSchema, breadcrumb]} />
+      <section className="py-16">
+        <div className="mx-auto max-w-page px-6 max-w-3xl">
+          <h1 className="text-3xl font-semibold text-primary-900">Frequently asked questions</h1>
+          <dl className="mt-8 space-y-4">
+            {items.map((item) => (
+              <div key={item.q} className="rounded-lg border border-neutral-300 p-6">
+                <dt className="font-medium text-neutral-900">{item.q}</dt>
+                <dd className="mt-2 text-sm text-neutral-600">{item.a}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </section>
+    </>
   );
 }

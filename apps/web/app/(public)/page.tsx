@@ -13,10 +13,27 @@ import { PartnerLogos } from "@/components/homepage/partner-logos";
 import { VideoIntro } from "@/components/homepage/video-intro";
 import { RepeatedCTA } from "@/components/homepage/repeated-cta";
 import { Skeleton } from "@/components/ui/skeleton";
+import { JsonLd } from "@/components/json-ld";
+import { makeMetadata, SITE_URL } from "@/lib/metadata";
+
+export const metadata = makeMetadata();
+
+const websiteSchema = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "Ascendly",
+  url: SITE_URL,
+  potentialAction: {
+    "@type": "SearchAction",
+    target: `${SITE_URL}/courses?search={search_term_string}`,
+    "query-input": "required name=search_term_string",
+  },
+};
 
 export default function HomePage() {
   return (
     <>
+      <JsonLd data={websiteSchema} />
       <Suspense fallback={<Skeleton className="h-80 w-full" />}>
         <HeroSection />
       </Suspense>

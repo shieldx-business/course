@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
+import { makeMetadata } from "@/lib/metadata";
 
 interface Post {
   id: string;
@@ -10,11 +11,18 @@ interface Post {
   published_at: string;
 }
 
+export const metadata = makeMetadata({
+  title: "Ascendly Blog — Career Growth & Skill Guides",
+  description:
+    "Career growth tips, skill guides, and learning strategies from the Ascendly team.",
+  path: "/blog",
+});
+
 export default async function BlogPage() {
   let posts: Post[] = [];
   try {
     const res = await fetch(
-      `${process.env.API_BASE_URL || "http://localhost:8000"}/api/v1/blog`,
+      `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/v1/blog`,
       { next: { revalidate: 60 } }
     );
     if (res.ok) posts = await res.json();

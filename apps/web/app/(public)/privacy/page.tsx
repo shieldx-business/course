@@ -1,3 +1,12 @@
+import { makeMetadata } from "@/lib/metadata";
+
+export const metadata = makeMetadata({
+  title: "Privacy Policy — Ascendly",
+  description:
+    "Ascendly collects only the data needed to deliver your membership. We do not sell your data.",
+  path: "/privacy",
+});
+
 export default function PrivacyPage() {
   return (
     <section className="py-16">

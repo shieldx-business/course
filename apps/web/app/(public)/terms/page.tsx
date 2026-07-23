@@ -1,3 +1,12 @@
+import { makeMetadata } from "@/lib/metadata";
+
+export const metadata = makeMetadata({
+  title: "Terms of Use — Ascendly",
+  description:
+    "By using Ascendly, you agree to use the platform for personal learning and not share accounts or scrape content.",
+  path: "/terms",
+});
+
 export default function TermsPage() {
   return (
     <section className="py-16">
