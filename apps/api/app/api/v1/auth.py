@@ -1,9 +1,9 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from app.db.mongodb import get_db
+from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token
 
 router = APIRouter()
-
-fake_users = {}
 
 
 class AuthIn(BaseModel):
@@ -18,20 +18,32 @@ class OTPIn(BaseModel):
 
 @router.post("/signup")
 async def signup(body: AuthIn):
-    if body.email in fake_users:
+    db = get_db()
+    if await db.users.find_one({"email": body.email}):
         raise HTTPException(status_code=400, detail="Account already exists")
-    fake_users[body.email] = body.password
-    return {"id": "user-" + str(len(fake_users)), "email": body.email, "role": "user"}
+    user = {
+        "_id": f"user-{body.email}",
+        "email": body.email,
+        "password_hash": hash_password(body.password),
+        "phone": None,
+        "phone_verified": False,
+        "role": "user",
+    }
+    await db.users.insert_one(user)
+    return {"id": user["_id"], "email": user["email"], "role": user["role"]}
 
 
 @router.post("/login")
 async def login(body: AuthIn):
-    if fake_users.get(body.email) != body.password:
+    db = get_db()
+    user = await db.users.find_one({"email": body.email})
+    if not user or not verify_password(body.password, user.get("password_hash", "")):
         raise HTTPException(status_code=401, detail="Invalid credentials")
+    token_data = {"sub": user["_id"], "email": user["email"], "role": user["role"]}
     return {
-        "access_token": "fake-access-token",
-        "refresh_token": "fake-refresh-token",
-        "user": {"id": "user-1", "email": body.email, "role": "user"},
+        "access_token": create_access_token(token_data),
+        "refresh_token": create_refresh_token(token_data),
+        "user": {"id": user["_id"], "email": user["email"], "role": user["role"]},
     }
 
 

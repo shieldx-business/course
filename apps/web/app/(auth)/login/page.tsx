@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { apiFetch } from "@/lib/api-client";
+import { setToken } from "@/lib/auth";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -17,11 +19,11 @@ export default function LoginPage() {
     e.preventDefault();
     setError("");
     try {
-      const res = await fetch("/api/v1/auth/login", {
+      const data = await apiFetch("/auth/login", {
         method: "POST",
         body: JSON.stringify({ email, password }),
       });
-      if (!res.ok) throw new Error("Invalid credentials");
+      setToken(data.access_token);
       router.push("/learn");
     } catch (err: any) {
       setError(err.message);

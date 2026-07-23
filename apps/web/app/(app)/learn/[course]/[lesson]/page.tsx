@@ -1,5 +1,9 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Check, Lock } from "lucide-react";
+import { apiFetch } from "@/lib/api-client";
 
 const lessons = [
   { id: "lesson-1", title: "Course introduction", completed: true, locked: false },
@@ -11,14 +15,26 @@ const lessons = [
 
 export default function CoursePlayerPage({ params }: { params: { course: string; lesson: string } }) {
   const current = lessons.find((l) => l.id === params.lesson) || lessons[0];
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    apiFetch(`/lessons/${current.id}/stream-token`, { method: "POST" })
+      .then((data) => setVideoUrl(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}${data.stream_url}`))
+      .catch((e) => setError(e.message));
+  }, [current.id]);
 
   return (
     <section className="py-6">
       <div className="mx-auto max-w-page px-6">
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2">
-            <div className="aspect-video rounded-lg bg-neutral-900 flex items-center justify-center text-white">
-              <p className="text-center text-neutral-300">Video player: {current.title}</p>
+            <div className="aspect-video rounded-lg bg-neutral-900 flex items-center justify-center overflow-hidden">
+              {videoUrl ? (
+                <video src={videoUrl} controls className="h-full w-full" />
+              ) : (
+                <p className="text-center text-neutral-300">{error || "Loading video..."}</p>
+              )}
             </div>
             <h1 className="mt-4 text-2xl font-semibold text-primary-900">{current.title}</h1>
           </div>

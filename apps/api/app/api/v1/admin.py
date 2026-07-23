@@ -1,6 +1,27 @@
-from fastapi import APIRouter
+from datetime import datetime, timezone
+from typing import List
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+from app.core.deps import require_admin
+from app.db.mongodb import get_db
 
 router = APIRouter()
+
+
+class LessonIn(BaseModel):
+    title: str
+    order: int
+    duration_seconds: int
+    drive_file_id: str | None = None
+
+
+class CourseIn(BaseModel):
+    category_id: str
+    title: str
+    slug: str
+    description: str
+    syllabus: List[LessonIn] = Field(default_factory=list)
+    outcome: List[str] = Field(default_factory=list)
 
 
 @router.get("/analytics/summary")
@@ -10,7 +31,7 @@ async def analytics_summary():
         "churn_risk_users": 124,
         "recommendation": "Offer a 3-day extension to users who completed 2+ lessons then paused.",
         "content_gap": "Demand for AI prompt engineering courses is outpacing supply by 23%.",
-        "timestamp": "2026-07-22T23:38:00Z",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
@@ -25,3 +46,110 @@ async def analytics_forecast():
         },
         "note": "LSTM forecast trained on last 90 days of orders and engagement data.",
     }
+
+
+@router.get("/courses", dependencies=[Depends(require_admin)])
+async def list_courses_admin():
+    db = get_db()
+    courses = await db.courses.find().to_list(1000)
+    return [{"id": c["_id"], **{k: v for k, v in c.items() if k != "_id"}} for c in courses]
+
+
+@router.post("/courses", dependencies=[Depends(require_admin)])
+async def create_course(body: CourseIn):
+    db = get_db()
+    cat = await db.categories.find_one({"_id": body.category_id})
+    if not cat:
+        raise HTTPException(status_code=400, detail="Category not found")
+
+    course_id = f"course-{body.slug}"
+    if await db.courses.find_one({"_id": course_id}):
+        raise HTTPException(status_code=400, detail="Course slug already exists")
+
+    course = {
+        "_id": course_id,
+        "category_id": body.category_id,
+        "category_slug": cat["slug"],
+        "category_name": cat["name"],
+        "title": body.title,
+        "slug": body.slug,
+        "description": body.description,
+        "lesson_count": len(body.syllabus),
+        "syllabus": [{"id": f"{course_id}-lesson-{i+1}", **s.model_dump()} for i, s in enumerate(body.syllabus)],
+        "outcome": body.outcome,
+    }
+    await db.courses.insert_one(course)
+    return {"id": course["_id"], **{k: v for k, v in course.items() if k != "_id"}}
+
+
+@router.get("/courses/{course_id}", dependencies=[Depends(require_admin)])
+async def get_course_admin(course_id: str):
+    db = get_db()
+    course = await db.courses.find_one({"_id": course_id})
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+    return {"id": course["_id"], **{k: v for k, v in course.items() if k != "_id"}}
+
+
+@router.put("/courses/{course_id}", dependencies=[Depends(require_admin)])
+async def update_course(course_id: str, body: CourseIn):
+    db = get_db()
+    cat = await db.categories.find_one({"_id": body.category_id})
+    if not cat:
+        raise HTTPException(status_code=400, detail="Category not found")
+
+    await db.courses.update_one(
+        {"_id": course_id},
+        {
+            "$set": {
+                "category_id": body.category_id,
+                "category_slug": cat["slug"],
+                "category_name": cat["name"],
+                "title": body.title,
+                "slug": body.slug,
+                "description": body.description,
+                "lesson_count": len(body.syllabus),
+                "syllabus": [{"id": f"{course_id}-lesson-{i+1}", **s.model_dump()} for i, s in enumerate(body.syllabus)],
+                "outcome": body.outcome,
+            }
+        },
+    )
+    course = await db.courses.find_one({"_id": course_id})
+    return {"id": course["_id"], **{k: v for k, v in course.items() if k != "_id"}}
+
+
+@router.delete("/courses/{course_id}", dependencies=[Depends(require_admin)])
+async def delete_course(course_id: str):
+    db = get_db()
+    await db.courses.delete_many({"_id": course_id})
+    return {"deleted": True}
+
+
+@router.post("/courses/{course_id}/lessons", dependencies=[Depends(require_admin)])
+async def add_lesson(course_id: str, body: LessonIn):
+    db = get_db()
+    course = await db.courses.find_one({"_id": course_id})
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    lesson = {
+        "id": f"{course_id}-lesson-{len(course['syllabus']) + 1}",
+        **body.model_dump(),
+    }
+    course["syllabus"].append(lesson)
+    course["lesson_count"] = len(course["syllabus"])
+    await db.courses.update_one({"_id": course_id}, {"$set": {"syllabus": course["syllabus"], "lesson_count": course["lesson_count"]}})
+    return lesson
+
+
+@router.delete("/courses/{course_id}/lessons/{lesson_id}", dependencies=[Depends(require_admin)])
+async def delete_lesson(course_id: str, lesson_id: str):
+    db = get_db()
+    course = await db.courses.find_one({"_id": course_id})
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    course["syllabus"] = [l for l in course["syllabus"] if l["id"] != lesson_id]
+    course["lesson_count"] = len(course["syllabus"])
+    await db.courses.update_one({"_id": course_id}, {"$set": {"syllabus": course["syllabus"], "lesson_count": course["lesson_count"]}})
+    return {"deleted": True}

@@ -66,6 +66,10 @@ class InMemoryCursor:
     async def to_list(self, length=None):
         return self.data
 
+    async def __aiter__(self):
+        for item in self.data:
+            yield item
+
     def sort(self, *args, **kwargs):
         return self
 
@@ -111,6 +115,16 @@ def get_redis():
 
 async def seed_db():
     db = get_db()
+    if await db.users.count_documents({}) == 0:
+        await db.users.insert_one({
+            "_id": "user-admin@ascendly.io",
+            "email": "admin@ascendly.io",
+            "password_hash": "$2b$12$3vIAp6VEfE8CD4zAirV2KOYJob2Aci6jW43MrhdFuZ2Mwnb9swCF6",  # password: password
+            "phone": None,
+            "phone_verified": False,
+            "role": "admin",
+        })
+
     if await db.categories.count_documents({}) == 0:
         categories = [
             {"_id": "cat-marketing", "name": "Marketing & Advertising", "slug": "marketing", "icon": "briefcase", "course_count": 240},
