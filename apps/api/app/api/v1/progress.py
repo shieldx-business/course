@@ -54,6 +54,28 @@ async def update_progress(lesson_id: str, body: ProgressUpdate, user: dict = Dep
     return {"id": record["_id"], **{k: v for k, v in record.items() if k != "_id"}}
 
 
+@router.get("/progress/summary")
+async def get_progress_summary(user: dict = Depends(get_current_user)):
+    db = get_db()
+    progress_records = await db.progress.find({"user_id": user["id"]}).to_list(1000)
+    courses = await db.courses.find().to_list(1000)
+
+    summary = []
+    for course in courses:
+        lesson_ids = {l["id"] for l in course.get("syllabus", [])}
+        completed = {p["lesson_id"] for p in progress_records if p["lesson_id"] in lesson_ids and p["completed"]}
+        total = len(lesson_ids)
+        summary.append({
+            "course_id": course["_id"],
+            "course_title": course["title"],
+            "course_slug": course["slug"],
+            "completed_lessons": len(completed),
+            "total_lessons": total,
+            "progress_pct": round(len(completed) / total * 100, 0) if total else 0,
+        })
+    return summary
+
+
 @router.get("/progress/continue")
 async def get_continue(user: dict = Depends(get_current_user)):
     db = get_db()
