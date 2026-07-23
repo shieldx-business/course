@@ -35,7 +35,7 @@ export default function AdminDashboard() {
 
   return (
     <section className="py-12">
-      <div className="mx-auto max-w-page px-6">
+      <div>
         <h1 className="text-3xl font-semibold text-primary-900">Admin dashboard</h1>
         {loading ? (
           <p className="mt-6 text-neutral-600">Loading...</p>

@@ -52,7 +52,7 @@ export default function AIAnalyticsPage() {
 
   return (
     <section className="py-12">
-      <div className="mx-auto max-w-page px-6">
+      <div>
         <h1 className="text-3xl font-semibold text-primary-900">AI Analytics & Forecasting</h1>
         <div className="mt-6 grid gap-4 md:grid-cols-2">
           <Card className="p-5">
