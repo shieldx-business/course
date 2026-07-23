@@ -1,13 +1,27 @@
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 
-const posts = [
-  { slug: "learn-excel-promotion", title: "How to learn Excel for a promotion", excerpt: "The five Excel skills managers actually notice." },
-  { slug: "power-bi-without-degree", title: "Learn Power BI without going back to school", excerpt: "A structured path from first chart to team reporting." },
-  { slug: "career-change-ux", title: "Career change: from receptionist to junior UX designer", excerpt: "Real skills, a realistic timeline, and how to build proof of work." },
-];
+interface Post {
+  id: string;
+  slug: string;
+  title: string;
+  excerpt: string;
+  author: string;
+  published_at: string;
+}
 
-export default function BlogPage() {
+export default async function BlogPage() {
+  let posts: Post[] = [];
+  try {
+    const res = await fetch(
+      `${process.env.API_BASE_URL || "http://localhost:8000"}/api/v1/blog`,
+      { next: { revalidate: 60 } }
+    );
+    if (res.ok) posts = await res.json();
+  } catch {
+    posts = [];
+  }
+
   return (
     <section className="py-16">
       <div className="mx-auto max-w-page px-6">
@@ -15,10 +29,13 @@ export default function BlogPage() {
         <p className="mt-2 text-neutral-600">Career growth, skill guides, and how to learn faster.</p>
         <div className="mt-8 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {posts.map((p) => (
-            <Link key={p.slug} href={`/blog/${p.slug}`}>
-              <Card className="h-full p-6 hover:border-accent-500 transition-colors">
+            <Link key={p.id} href={`/blog/${p.slug}`}>
+              <Card className="h-full p-6 transition-colors hover:border-accent-500">
                 <h2 className="font-medium text-neutral-900">{p.title}</h2>
                 <p className="mt-2 text-sm text-neutral-600">{p.excerpt}</p>
+                <p className="mt-4 text-xs text-neutral-500">
+                  {p.published_at ? new Date(p.published_at).toLocaleDateString() : ""} · {p.author}
+                </p>
               </Card>
             </Link>
           ))}

@@ -217,6 +217,29 @@ async def seed_db():
         ]
         await db.reviews.insert_many(reviews)
 
+    if await db.blog.count_documents({}) == 0:
+        posts = [
+            {
+                "_id": "post-how-we-built-ascendly",
+                "slug": "how-we-built-ascendly",
+                "title": "How we built Ascendly",
+                "excerpt": "A behind-the-scenes look at the engineering and design choices behind the platform.",
+                "content": "Ascendly was built with a single goal: make premium, structured learning accessible. We chose FastAPI for the backend and Next.js for the frontend to keep the experience fast and SEO-friendly. Every course is organized as a path, not a playlist, so learners can see progress and stay motivated.",
+                "author": "Ascendly Team",
+                "published_at": "2026-07-15T00:00:00+00:00",
+            },
+            {
+                "_id": "post-top-skills-2026",
+                "slug": "top-skills-2026",
+                "title": "Top skills to learn in 2026",
+                "excerpt": "Data fluency, AI literacy, and structured problem solving are more valuable than ever.",
+                "content": "Employers now expect team members to work with data, write clear documentation, and use AI tools responsibly. Our curated paths cover data analytics, business communication, and AI fundamentals so members stay ahead.",
+                "author": "Ascendly Team",
+                "published_at": "2026-07-10T00:00:00+00:00",
+            },
+        ]
+        await db.blog.insert_many(posts)
+
     if await db.coupons.count_documents({}) == 0:
         await db.coupons.insert_one({
             "_id": "coupon-launch20",
