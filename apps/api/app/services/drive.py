@@ -52,6 +52,58 @@ def _cache_key(file_id: str, start: int | None, end: int | None) -> str:
     return f"drive:{file_id}:{start or 0}-{end or 'end'}"
 
 
+class DriveStream:
+    """Async stream of a Drive file. Holds the httpx client/response open until consumed."""
+
+    def __init__(self, client: httpx.AsyncClient, response: httpx.Response):
+        self.client = client
+        self.response = response
+
+    @property
+    def status(self) -> int:
+        return self.response.status_code
+
+    @property
+    def headers(self) -> httpx.Headers:
+        return self.response.headers
+
+    async def iter_bytes(self):
+        try:
+            async for chunk in self.response.aiter_bytes():
+                yield chunk
+        finally:
+            await self.response.aclose()
+            await self.client.aclose()
+
+    async def close(self):
+        await self.response.aclose()
+        await self.client.aclose()
+
+
+async def stream_file(file_id: str, range_header: str | None = None) -> DriveStream | None:
+    """Stream a Drive file using the same Range semantics as the client request."""
+    token = await _google_access_token()
+    if not token:
+        return None
+
+    headers = {"Authorization": f"Bearer {token}"}
+    if range_header:
+        headers["Range"] = range_header
+
+    client = httpx.AsyncClient()
+    try:
+        response = await client.stream(
+            "GET",
+            f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media",
+            headers=headers,
+            timeout=60.0,
+        ).__aenter__()
+    except Exception:
+        await client.aclose()
+        return None
+    return DriveStream(client, response)
+
+
 async def get_file_bytes(file_id: str, start: int | None = None, end: int | None = None):
     cache = await cache_service.get_cache()
     cache_key = _cache_key(file_id, start, end)

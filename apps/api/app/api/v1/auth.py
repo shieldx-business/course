@@ -188,39 +188,59 @@ async def logout(response: Response):
     return {"message": "Logged out"}
 
 
+def _sanitize_phone(phone: str) -> str:
+    return "".join(c for c in phone if c.isdigit() or c == "+")
+
+
 @router.post("/otp/request", dependencies=[Depends(_rate_limit_auth)])
-async def request_otp(body: OTPRequest, user: dict = Depends(get_current_user)):
+async def request_otp(body: OTPRequest):
     cache = await cache_service.get_cache()
     code = otp_service.generate_otp()
-    sanitized = "".join(c for c in body.phone if c.isdigit() or c == "+")
-    await cache.setex(f"otp:{user['id']}:{sanitized}", 300, code)
+    sanitized = _sanitize_phone(body.phone)
+    await cache.setex(f"otp:{sanitized}", 300, code)
     await otp_service.send_otp(sanitized, code)
     return {"message": "OTP sent", "phone": sanitized}
 
 
 @router.post("/otp/verify", dependencies=[Depends(_rate_limit_auth)])
-async def verify_otp(body: OTPVerify, user: dict = Depends(get_current_user)):
+async def verify_otp(body: OTPVerify):
     cache = await cache_service.get_cache()
-    sanitized = "".join(c for c in body.phone if c.isdigit() or c == "+")
-    stored = await cache.get(f"otp:{user['id']}:{sanitized}")
+    sanitized = _sanitize_phone(body.phone)
+    stored = await cache.get(f"otp:{sanitized}")
     if not stored or stored != body.code:
         raise HTTPException(status_code=400, detail="Invalid or expired OTP")
 
     db = get_db()
     trial_expires = (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()
-    await db.users.update_one(
-        {"_id": user["id"]},
-        {
-            "$set": {
-                "phone": sanitized,
-                "phone_verified": True,
-                "trial_active": True,
-                "trial_expires": trial_expires,
-            }
-        },
-    )
+    user = await db.users.find_one({"phone": sanitized})
+    if not user:
+        trial_id = f"trial-{uuid.uuid4()}"
+        user = {
+            "_id": trial_id,
+            "email": f"{sanitized}@trial.ascendly.io",
+            "name": "",
+            "password_hash": "",
+            "phone": sanitized,
+            "phone_verified": True,
+            "trial_active": True,
+            "trial_expires": trial_expires,
+            "role": "user",
+        }
+        await db.users.insert_one(user)
+    else:
+        await db.users.update_one(
+            {"_id": user["_id"]},
+            {
+                "$set": {
+                    "phone": sanitized,
+                    "phone_verified": True,
+                    "trial_active": True,
+                    "trial_expires": trial_expires,
+                }
+            },
+        )
 
-    updated = await db.users.find_one({"_id": user["id"]})
+    updated = await db.users.find_one({"_id": user["_id"]})
     token_data = _token_payload(updated)
     access = create_access_token(token_data)
     refresh = create_refresh_token(token_data)

@@ -10,6 +10,7 @@ import { Check, Lock, Paperclip } from "lucide-react";
 import { apiFetch } from "@/lib/api-client";
 import { useAuth } from "@/lib/auth-context";
 import { Course, Lesson, Progress } from "@/types";
+import { WatermarkOverlay } from "@/components/player/watermark-overlay";
 
 interface Subscription {
   id: string;
@@ -161,30 +162,33 @@ export default function CoursePlayerPage({ params }: { params: { course: string;
       <div className="mx-auto max-w-page px-6">
         <div className="grid gap-6 lg:grid-cols-3">
           <div className="lg:col-span-2 space-y-4">
-            <div className="aspect-video rounded-lg bg-neutral-900 flex items-center justify-center overflow-hidden">
+            <div className="relative aspect-video rounded-lg bg-neutral-900 flex items-center justify-center overflow-hidden">
               {videoUrl ? (
-                <video
-                  ref={videoRef}
-                  src={videoUrl}
-                  controls
-                  controlsList="nodownload"
-                  playsInline
-                  className="h-full w-full select-none"
-                  onContextMenu={(e) => e.preventDefault()}
-                  onKeyDown={(e) => {
-                    if (e.ctrlKey && (e.key === "s" || e.key === "S")) {
-                      e.preventDefault();
-                    }
-                  }}
-                  onLoadedMetadata={(e) => {
-                    if (startPosition > 0) {
-                      e.currentTarget.currentTime = startPosition;
-                    }
-                  }}
-                  onTimeUpdate={(e) => throttledProgress(false, Math.floor(e.currentTarget.currentTime))}
-                  onPause={(e) => updateProgress(false, Math.floor(e.currentTarget.currentTime))}
-                  onEnded={() => updateProgress(true, 0)}
-                />
+                <>
+                  <video
+                    ref={videoRef}
+                    src={videoUrl}
+                    controls
+                    controlsList="nodownload"
+                    playsInline
+                    className="h-full w-full select-none"
+                    onContextMenu={(e) => e.preventDefault()}
+                    onKeyDown={(e) => {
+                      if (e.ctrlKey && (e.key === "s" || e.key === "S")) {
+                        e.preventDefault();
+                      }
+                    }}
+                    onLoadedMetadata={(e) => {
+                      if (startPosition > 0) {
+                        e.currentTarget.currentTime = startPosition;
+                      }
+                    }}
+                    onTimeUpdate={(e) => throttledProgress(false, Math.floor(e.currentTarget.currentTime))}
+                    onPause={(e) => updateProgress(false, Math.floor(e.currentTarget.currentTime))}
+                    onEnded={() => updateProgress(true, 0)}
+                  />
+                  <WatermarkOverlay email={user?.email} />
+                </>
               ) : (
                 <p className="text-center text-neutral-300">{error || "Loading video..."}</p>
               )}

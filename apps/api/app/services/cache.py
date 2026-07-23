@@ -1,3 +1,4 @@
+import fnmatch
 import time
 import json
 from typing import Any
@@ -53,6 +54,13 @@ class _MemoryStore:
             value, _ = item
             self._data[key] = (value, time.time() + seconds)
 
+    def keys(self, pattern: str):
+        return [k for k in self._data.keys() if fnmatch.fnmatch(k, pattern)]
+
+    async def delete_many(self, keys: list[str]):
+        for k in keys:
+            self._data.pop(k, None)
+
 
 _cache = None
 
@@ -93,3 +101,24 @@ async def cached_json(key: str, loader, ttl: int = 60):
 async def invalidate(key: str):
     cache = await get_cache()
     await cache.delete(key)
+
+
+async def invalidate_pattern(pattern: str):
+    cache = await get_cache()
+    if isinstance(cache, _MemoryStore):
+        keys = cache.keys(pattern)
+        await cache.delete_many(keys)
+    else:
+        keys = await cache.keys(pattern)
+        if keys:
+            await cache.delete(*keys)
+
+
+async def invalidate_public_course_cache(slug: str | None = None, category_slug: str | None = None):
+    await invalidate("stats:public")
+    await invalidate("categories:all")
+    if category_slug:
+        await invalidate(f"category:{category_slug}")
+    if slug:
+        await invalidate(f"course:{slug}")
+        await invalidate_pattern("courses:*")

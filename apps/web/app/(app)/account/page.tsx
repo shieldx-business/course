@@ -40,8 +40,8 @@ export default function AccountPage() {
     setName(user?.name || "");
   }, [user?.name]);
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     router.push("/login");
   };
 

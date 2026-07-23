@@ -8,6 +8,7 @@ from app.db.mongodb import get_db
 from app.services import ai
 from app.services import payment as payment_service
 from app.services import drive as drive_service
+from app.services import cache as cache_service
 
 router = APIRouter()
 
@@ -18,6 +19,7 @@ class AttachmentIn(BaseModel):
 
 
 class LessonIn(BaseModel):
+    id: str | None = None
     title: str
     order: int
     duration_seconds: int
@@ -147,10 +149,11 @@ async def create_course(body: CourseIn):
         "slug": body.slug,
         "description": body.description,
         "lesson_count": len(body.syllabus),
-        "syllabus": [{"id": f"{course_id}-lesson-{i+1}", **s.model_dump()} for i, s in enumerate(body.syllabus)],
+        "syllabus": [{"id": s.id or f"{course_id}-lesson-{i+1}", **s.model_dump(exclude={"id"})} for i, s in enumerate(body.syllabus)],
         "outcome": body.outcome,
     }
     await db.courses.insert_one(course)
+    await cache_service.invalidate_public_course_cache(slug=body.slug, category_slug=cat["slug"])
     return {"id": course["_id"], **{k: v for k, v in course.items() if k != "_id"}}
 
 
@@ -166,9 +169,29 @@ async def get_course_admin(course_id: str):
 @router.put("/courses/{course_id}", dependencies=[Depends(require_admin)])
 async def update_course(course_id: str, body: CourseIn):
     db = get_db()
+    existing = await db.courses.find_one({"_id": course_id})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Course not found")
+
     cat = await db.categories.find_one({"_id": body.category_id})
     if not cat:
         raise HTTPException(status_code=400, detail="Category not found")
+
+    old_lessons = {lesson["id"]: lesson for lesson in existing.get("syllabus", [])}
+
+    def _merge_lesson(i: int, lesson_in: LessonIn):
+        lesson_id = lesson_in.id
+        if lesson_id and lesson_id in old_lessons:
+            old = old_lessons[lesson_id]
+            updates = lesson_in.model_dump(exclude={"id"}, exclude_unset=True)
+            merged = {**old, **updates, "id": lesson_id}
+            return merged
+        return {
+            "id": lesson_in.id or f"{course_id}-lesson-{i+1}",
+            **lesson_in.model_dump(exclude={"id"}),
+        }
+
+    syllabus = [_merge_lesson(i, s) for i, s in enumerate(body.syllabus)]
 
     await db.courses.update_one(
         {"_id": course_id},
@@ -180,12 +203,15 @@ async def update_course(course_id: str, body: CourseIn):
                 "title": body.title,
                 "slug": body.slug,
                 "description": body.description,
-                "lesson_count": len(body.syllabus),
-                "syllabus": [{"id": f"{course_id}-lesson-{i+1}", **s.model_dump()} for i, s in enumerate(body.syllabus)],
+                "lesson_count": len(syllabus),
+                "syllabus": syllabus,
                 "outcome": body.outcome,
             }
         },
     )
+    if existing["slug"] != body.slug:
+        await cache_service.invalidate(f"course:{existing['slug']}")
+    await cache_service.invalidate_public_course_cache(slug=body.slug, category_slug=cat["slug"])
     course = await db.courses.find_one({"_id": course_id})
     return {"id": course["_id"], **{k: v for k, v in course.items() if k != "_id"}}
 
@@ -193,6 +219,9 @@ async def update_course(course_id: str, body: CourseIn):
 @router.delete("/courses/{course_id}", dependencies=[Depends(require_admin)])
 async def delete_course(course_id: str):
     db = get_db()
+    course = await db.courses.find_one({"_id": course_id})
+    if course:
+        await cache_service.invalidate_public_course_cache(slug=course.get("slug"), category_slug=course.get("category_slug"))
     await db.courses.delete_many({"_id": course_id})
     return {"deleted": True}
 
@@ -216,6 +245,7 @@ async def map_lesson_drive_file(course_id: str, lesson_id: str, body: DriveMapIn
         raise HTTPException(status_code=404, detail="Lesson not found")
 
     await db.courses.update_one({"_id": course_id}, {"$set": {"syllabus": syllabus}})
+    await cache_service.invalidate_public_course_cache(slug=course.get("slug"), category_slug=course.get("category_slug"))
     return {"lesson_id": lesson_id, "drive_file_id": body.drive_file_id}
 
 
@@ -246,6 +276,7 @@ async def add_lesson(course_id: str, body: LessonIn):
     course["syllabus"].append(lesson)
     course["lesson_count"] = len(course["syllabus"])
     await db.courses.update_one({"_id": course_id}, {"$set": {"syllabus": course["syllabus"], "lesson_count": course["lesson_count"]}})
+    await cache_service.invalidate_public_course_cache(slug=course.get("slug"), category_slug=course.get("category_slug"))
     return lesson
 
 
@@ -259,6 +290,7 @@ async def delete_lesson(course_id: str, lesson_id: str):
     course["syllabus"] = [l for l in course["syllabus"] if l["id"] != lesson_id]
     course["lesson_count"] = len(course["syllabus"])
     await db.courses.update_one({"_id": course_id}, {"$set": {"syllabus": course["syllabus"], "lesson_count": course["lesson_count"]}})
+    await cache_service.invalidate_public_course_cache(slug=course.get("slug"), category_slug=course.get("category_slug"))
     return {"deleted": True}
 
 

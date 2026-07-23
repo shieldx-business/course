@@ -8,9 +8,10 @@ from fastapi.responses import Response, StreamingResponse
 from app.core.deps import get_current_user
 from app.core.rate_limit import get_client_ip, rate_limit
 from app.db.mongodb import get_db
-from app.services.drive import is_drive_configured, get_file_bytes
-from app.services import watermark as watermark_service
+from app.services.drive import stream_file
 from app.services import cache as cache_service
+
+PLACEHOLDER_VIDEO = b"\x00\x00\x00 ftypisom\x00\x00\x02\x00isommp41"
 
 router = APIRouter()
 
@@ -150,22 +151,29 @@ def _parse_range(range_header: str | None, total: int) -> tuple[int, int] | None
         return None
 
 
-async def _get_video_bytes(drive_file_id: str | None, user: dict, request: Request) -> bytes:
-    if is_drive_configured() and drive_file_id:
-        try:
-            if request.headers.get("x-no-watermark") == "1" or user.get("role") == "admin":
-                file_bytes = await get_file_bytes(drive_file_id)
-            else:
-                file_bytes = await watermark_service.get_watermarked_video(
-                    drive_file_id, user["id"], user.get("email")
-                )
-            if file_bytes:
-                return file_bytes
-        except Exception:
-            pass
-
-    # Fallback placeholder MP4
-    return b"\x00\x00\x00\x20ftypisom\x00\x00\x02\x00isommp41"
+def _placeholder_response(range_header: str | None, user_id: str):
+    total = len(PLACEHOLDER_VIDEO)
+    byte_range = _parse_range(range_header, total)
+    headers = {
+        "Content-Disposition": "inline",
+        "Accept-Ranges": "bytes",
+        "X-Watermark-User": user_id,
+    }
+    if byte_range:
+        start, end = byte_range
+        chunk = PLACEHOLDER_VIDEO[start : end + 1]
+        headers["Content-Range"] = f"bytes {start}-{end}/{total}"
+        return Response(
+            content=chunk,
+            status_code=status.HTTP_206_PARTIAL_CONTENT,
+            headers=headers,
+            media_type="video/mp4",
+        )
+    return StreamingResponse(
+        iter([PLACEHOLDER_VIDEO]),
+        media_type="video/mp4",
+        headers=headers,
+    )
 
 
 @router.get("/stream/{token}")
@@ -175,31 +183,26 @@ async def stream_video(token: str, request: Request):
         raise HTTPException(status_code=403, detail="Invalid or expired stream token")
 
     drive_file_id = data.get("drive_file_id")
-    video_bytes = await _get_video_bytes(drive_file_id, {"id": data["user_id"], "email": data.get("user_email"), "role": "user"}, request)
-    total = len(video_bytes)
-
     range_header = request.headers.get("range")
-    byte_range = _parse_range(range_header, total)
 
-    headers = {
-        "Content-Disposition": "inline",
-        "Accept-Ranges": "bytes",
-        "X-Watermark-User": data["user_id"],
-    }
+    if drive_file_id:
+        drive_stream = await stream_file(drive_file_id, range_header)
+        if drive_stream:
+            headers: dict[str, str] = {
+                "Content-Disposition": "inline",
+                "Accept-Ranges": "bytes",
+                "X-Watermark-User": data["user_id"],
+                "Cache-Control": "private, no-store",
+            }
+            for h in ["content-type", "content-length", "content-range", "accept-ranges"]:
+                v = drive_stream.headers.get(h)
+                if v:
+                    headers[h] = v
+            return StreamingResponse(
+                drive_stream.iter_bytes(),
+                status_code=drive_stream.status,
+                headers=headers,
+                media_type="video/mp4",
+            )
 
-    if byte_range:
-        start, end = byte_range
-        chunk = video_bytes[start : end + 1]
-        headers["Content-Range"] = f"bytes {start}-{end}/{total}"
-        return Response(
-            content=chunk,
-            status_code=status.HTTP_206_PARTIAL_CONTENT,
-            headers=headers,
-            media_type="video/mp4",
-        )
-
-    return StreamingResponse(
-        iter([video_bytes]),
-        media_type="video/mp4",
-        headers=headers,
-    )
+    return _placeholder_response(range_header, data["user_id"])
