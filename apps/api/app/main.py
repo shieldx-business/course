@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.db.mongodb import seed_db
-from app.api.v1 import courses, auth, subscriptions, reviews, admin, stream, progress
+from app.api.v1 import courses, auth, subscriptions, reviews, admin, stream, progress, contact
 
 
 @asynccontextmanager
@@ -28,6 +28,7 @@ app.include_router(reviews.router, prefix="/api/v1", tags=["reviews"])
 app.include_router(admin.router, prefix="/api/v1/admin", tags=["admin"])
 app.include_router(stream.router, prefix="/api/v1", tags=["stream"])
 app.include_router(progress.router, prefix="/api/v1", tags=["progress"])
+app.include_router(contact.router, prefix="/api/v1", tags=["contact"])
 
 
 @app.get("/api/v1/health")
