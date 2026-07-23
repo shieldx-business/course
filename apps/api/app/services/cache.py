@@ -1,15 +1,16 @@
 import time
+from typing import Any
 from app.core.config import settings
 
 
 class _MemoryStore:
     def __init__(self):
-        self._data: dict[str, tuple[str, float]] = {}
+        self._data: dict[str, tuple[Any, float]] = {}
 
-    async def setex(self, key: str, seconds: int, value: str):
+    async def setex(self, key: str, seconds: int, value: Any):
         self._data[key] = (value, time.time() + seconds)
 
-    async def get(self, key: str) -> str | None:
+    async def get(self, key: str) -> Any | None:
         item = self._data.get(key)
         if not item:
             return None

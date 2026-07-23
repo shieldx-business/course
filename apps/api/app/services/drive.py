@@ -1,10 +1,12 @@
 import json
 import os
+import httpx
 from io import BytesIO
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseDownload
 from app.core.config import settings
+from app.services import cache as cache_service
 
 _SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
 
@@ -17,7 +19,6 @@ def _get_credentials():
         info = json.loads(sa_json)
         return service_account.Credentials.from_service_account_info(info, scopes=_SCOPES)
     except Exception:
-        # If it's a file path, try loading it
         if os.path.exists(sa_json):
             return service_account.Credentials.from_service_account_file(sa_json, scopes=_SCOPES)
         return None
@@ -34,7 +35,48 @@ def is_drive_configured() -> bool:
     return bool(settings.google_service_account_json)
 
 
-async def get_file_bytes(file_id: str, start: int = 0, end: int | None = None):
+async def _google_access_token() -> str | None:
+    creds = _get_credentials()
+    if not creds:
+        return None
+    from google.auth.transport.requests import Request
+
+    if creds.expired or not creds.token:
+        creds.refresh(Request())
+    return creds.token
+
+
+def _cache_key(file_id: str, start: int | None, end: int | None) -> str:
+    if start is None and end is None:
+        return f"drive:{file_id}:all"
+    return f"drive:{file_id}:{start or 0}-{end or 'end'}"
+
+
+async def get_file_bytes(file_id: str, start: int | None = None, end: int | None = None):
+    cache = await cache_service.get_cache()
+    cache_key = _cache_key(file_id, start, end)
+    cached = await cache.get(cache_key)
+    if cached is not None:
+        return cached
+
+    token = await _google_access_token()
+    if token:
+        headers = {"Authorization": f"Bearer {token}"}
+        if start is not None or end is not None:
+            range_header = f"bytes={start or 0}-{end if end is not None else ''}"
+            headers["Range"] = range_header
+        async with httpx.AsyncClient() as client:
+            res = await client.get(
+                f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media",
+                headers=headers,
+                timeout=60.0,
+            )
+            res.raise_for_status()
+            data = res.content
+            await cache.setex(cache_key, 3600, data)
+            return data
+
+    # Fallback to googleapiclient (does not support range)
     service = get_drive_service()
     if not service:
         return None
@@ -47,7 +89,8 @@ async def get_file_bytes(file_id: str, start: int = 0, end: int | None = None):
         status, done = downloader.next_chunk()
     data = fh.getvalue()
     if end is not None:
-        data = data[start : end + 1]
+        data = data[start or 0 : end + 1]
     elif start:
         data = data[start:]
+    await cache.setex(cache_key, 3600, data)
     return data

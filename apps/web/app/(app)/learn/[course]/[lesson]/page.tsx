@@ -129,7 +129,14 @@ export default function CoursePlayerPage({ params }: { params: { course: string;
                 <video
                   src={videoUrl}
                   controls
-                  className="h-full w-full"
+                  controlsList="nodownload"
+                  className="h-full w-full select-none"
+                  onContextMenu={(e) => e.preventDefault()}
+                  onKeyDown={(e) => {
+                    if (e.ctrlKey && (e.key === "s" || e.key === "S")) {
+                      e.preventDefault();
+                    }
+                  }}
                   onTimeUpdate={(e) => updateProgress(false, Math.floor(e.currentTarget.currentTime))}
                   onEnded={() => updateProgress(true, 0)}
                 />
