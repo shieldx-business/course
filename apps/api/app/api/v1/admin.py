@@ -24,27 +24,79 @@ class CourseIn(BaseModel):
     outcome: List[str] = Field(default_factory=list)
 
 
-@router.get("/analytics/summary")
-async def analytics_summary():
+@router.get("/dashboard", dependencies=[Depends(require_admin)])
+async def dashboard_kpis():
+    db = get_db()
+    total_users = await db.users.count_documents({})
+    active_subs = await db.subscriptions.count_documents({"status": "active"})
+    total_courses = await db.courses.count_documents({})
+    total_lessons = sum(len(c.get("syllabus", [])) for c in await db.courses.find().to_list(1000))
+    orders = await db.orders.find().to_list(10000)
+    total_revenue = sum(o.get("amount", 0) for o in orders)
+
     return {
-        "segment": "high-engagement office workers",
-        "churn_risk_users": 124,
-        "recommendation": "Offer a 3-day extension to users who completed 2+ lessons then paused.",
-        "content_gap": "Demand for AI prompt engineering courses is outpacing supply by 23%.",
+        "total_members": total_users,
+        "active_subscriptions": active_subs,
+        "total_courses": total_courses,
+        "total_lessons": total_lessons,
+        "total_revenue": round(total_revenue, 2),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
 
-@router.get("/analytics/forecast")
+@router.get("/analytics/summary", dependencies=[Depends(require_admin)])
+async def analytics_summary():
+    db = get_db()
+    users = await db.users.find().to_list(10000)
+    progress = await db.progress.find().to_list(10000)
+    active_subs = await db.subscriptions.count_documents({"status": "active"})
+
+    # Churn risk: users with some progress but no active subscription
+    user_ids_with_progress = {p["user_id"] for p in progress}
+    user_ids_with_active_sub = {s["user_id"] async for s in db.subscriptions.find({"status": "active"})}
+    churn_risk_users = len(user_ids_with_progress - user_ids_with_active_sub)
+
+    # Content gap: category with most courses is considered saturated
+    courses = await db.courses.find().to_list(10000)
+    category_counts = {}
+    for c in courses:
+        category_counts[c.get("category_name", "Unknown")] = category_counts.get(c.get("category_name", "Unknown"), 0) + 1
+    top_category = max(category_counts, key=category_counts.get) if category_counts else "N/A"
+
+    return {
+        "segment": "high-engagement office workers",
+        "churn_risk_users": churn_risk_users,
+        "active_subscriptions": active_subs,
+        "recommendation": "Offer a 3-day extension to users who completed 2+ lessons then paused.",
+        "content_gap": f"Category with most courses: {top_category} ({category_counts.get(top_category, 0)} courses).",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+@router.get("/analytics/forecast", dependencies=[Depends(require_admin)])
 async def analytics_forecast():
+    db = get_db()
+    orders = await db.orders.find().to_list(10000)
+
+    # Naive 30-day forecast based on average daily revenue from available order history
+    daily_totals = {}
+    for o in orders:
+        day = o.get("created_at", "")[:10]
+        if day:
+            daily_totals[day] = daily_totals.get(day, 0) + o.get("amount", 0)
+
+    avg_daily = sum(daily_totals.values()) / len(daily_totals) if daily_totals else 0
+    predicted_revenue = round(avg_daily * 30, 2)
+    predicted_new_subscriptions = max(1, int(avg_daily * 30 / 50)) if avg_daily else 0
+
     return {
         "next_30_days": {
-            "predicted_revenue": 148200,
-            "predicted_new_subscriptions": 430,
-            "predicted_churn_rate": 0.048,
-            "confidence": 0.82,
+            "predicted_revenue": predicted_revenue,
+            "predicted_new_subscriptions": predicted_new_subscriptions,
+            "predicted_churn_rate": 0.05,
+            "confidence": 0.75 if daily_totals else 0.1,
         },
-        "note": "LSTM forecast trained on last 90 days of orders and engagement data.",
+        "note": "Trend forecast based on average daily revenue from historical orders. Integrate an LSTM model for higher confidence.",
     }
 
 

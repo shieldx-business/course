@@ -3,16 +3,47 @@
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { apiFetch } from "@/lib/api-client";
+
+interface Summary {
+  segment: string;
+  churn_risk_users: number;
+  active_subscriptions: number;
+  recommendation: string;
+  content_gap: string;
+  timestamp: string;
+}
+
+interface Forecast {
+  next_30_days: {
+    predicted_revenue: number;
+    predicted_new_subscriptions: number;
+    predicted_churn_rate: number;
+    confidence: number;
+  };
+  note: string;
+}
 
 export default function AIAnalyticsPage() {
-  const [summary, setSummary] = useState<any>(null);
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [forecast, setForecast] = useState<Forecast | null>(null);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch("/api/v1/admin/analytics/summary")
-      .then((r) => r.json())
+    apiFetch("/admin/analytics/summary")
       .then(setSummary)
-      .catch(() => setSummary({ error: "Analytics service unavailable" }));
+      .catch((e) => setError(e.message));
   }, []);
+
+  const runForecast = async () => {
+    setError("");
+    try {
+      const f = await apiFetch("/admin/analytics/forecast");
+      setForecast(f);
+    } catch (e: any) {
+      setError(e.message);
+    }
+  };
 
   return (
     <section className="py-12">
@@ -20,17 +51,34 @@ export default function AIAnalyticsPage() {
         <h1 className="text-3xl font-semibold text-primary-900">AI Analytics & Forecasting</h1>
         <div className="mt-6 grid gap-4 md:grid-cols-2">
           <Card className="p-5">
-            <h2 className="font-medium text-neutral-900">LLM Summary</h2>
-            <pre className="mt-3 overflow-auto rounded bg-neutral-100 p-3 text-xs text-neutral-900">
-              {summary ? JSON.stringify(summary, null, 2) : "Loading..."}
-            </pre>
+            <h2 className="font-medium text-neutral-900">Summary</h2>
+            {summary ? (
+              <ul className="mt-3 space-y-2 text-sm text-neutral-900">
+                <li><strong>Segment:</strong> {summary.segment}</li>
+                <li><strong>Churn risk users:</strong> {summary.churn_risk_users}</li>
+                <li><strong>Active subscriptions:</strong> {summary.active_subscriptions}</li>
+                <li><strong>Recommendation:</strong> {summary.recommendation}</li>
+                <li><strong>Content gap:</strong> {summary.content_gap}</li>
+              </ul>
+            ) : (
+              <p className="mt-3 text-sm text-neutral-600">Loading...</p>
+            )}
           </Card>
           <Card className="p-5">
-            <h2 className="font-medium text-neutral-900">LSTM Forecast</h2>
+            <h2 className="font-medium text-neutral-900">30-Day Forecast</h2>
             <p className="mt-3 text-sm text-neutral-600">
               Run the forecasting pipeline to predict next 30-day revenue, churn risk, and content demand.
             </p>
-            <Button className="mt-4">Run forecast</Button>
+            <Button onClick={runForecast} className="mt-4">Run forecast</Button>
+            {forecast && (
+              <ul className="mt-4 space-y-2 text-sm text-neutral-900">
+                <li><strong>Predicted revenue:</strong> ${forecast.next_30_days.predicted_revenue.toLocaleString()}</li>
+                <li><strong>New subscriptions:</strong> {forecast.next_30_days.predicted_new_subscriptions}</li>
+                <li><strong>Churn rate:</strong> {(forecast.next_30_days.predicted_churn_rate * 100).toFixed(1)}%</li>
+                <li><strong>Confidence:</strong> {(forecast.next_30_days.confidence * 100).toFixed(0)}%</li>
+              </ul>
+            )}
+            {error && <p className="mt-3 text-sm text-error">{error}</p>}
           </Card>
         </div>
       </div>
