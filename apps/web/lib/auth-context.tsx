@@ -8,6 +8,7 @@ export interface User {
   email: string;
   name?: string;
   role: "user" | "admin";
+  subscription_status?: string;
   phone?: string | null;
   phone_verified?: boolean;
   trial_active?: boolean;

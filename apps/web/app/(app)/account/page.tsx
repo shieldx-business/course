@@ -82,10 +82,18 @@ export default function AccountPage() {
     }
   };
 
+  const renewalDays = sub ? Math.ceil((new Date(sub.ends_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24)) : null;
+
   return (
     <section className="py-12">
       <div className="mx-auto max-w-page px-6">
         <h1 className="text-3xl font-semibold text-primary-900">Account</h1>
+
+        {!loading && sub && sub.status === "active" && renewalDays !== null && renewalDays <= 7 && (
+          <div className="mt-6 rounded-md bg-success/10 p-4 text-sm text-success">
+            Your membership renews on {new Date(sub.ends_at).toLocaleDateString()}. Nothing to do — you&apos;ll keep full access without interruption.
+          </div>
+        )}
 
         <Card className="mt-6 p-6">
           {loading ? (

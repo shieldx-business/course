@@ -99,14 +99,18 @@ async def _create_subscription_and_order(user_id: str, tier: dict, coupon: dict 
     now = datetime.now(timezone.utc)
     months = tier["duration_months"]
 
-    await db.subscriptions.insert_one({
+    subscription_doc = {
         "_id": sub_id,
         "user_id": user_id,
         "tier": tier["id"],
         "status": "active",
         "starts_at": now.isoformat(),
         "ends_at": _end_date(months).isoformat(),
-    })
+        "external_id": external_id,
+    }
+    if provider == "stripe":
+        subscription_doc["stripe_subscription_id"] = external_id
+    await db.subscriptions.insert_one(subscription_doc)
 
     await db.orders.insert_one({
         "_id": order_id,

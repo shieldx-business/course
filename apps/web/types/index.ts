@@ -27,6 +27,7 @@ export interface Course {
   title: string;
   slug: string;
   description: string;
+  thumbnail_url?: string;
   lesson_count: number;
   syllabus: Lesson[];
   outcome: string[];
@@ -55,8 +56,10 @@ export interface SubscriptionTier {
 export interface Review {
   id: string;
   name: string;
-  role: string;
-  quote: string;
+  role?: string;
+  job_title?: string;
+  quote?: string;
+  comment?: string;
   outcome: string;
   rating?: number;
   verified?: boolean;

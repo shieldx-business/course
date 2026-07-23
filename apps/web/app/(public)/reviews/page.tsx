@@ -31,7 +31,7 @@ export default async function ReviewsPage() {
     "@context": "https://schema.org",
     "@type": "Review",
     author: { "@type": "Person", name: r.name },
-    reviewBody: r.quote || r.outcome,
+    reviewBody: r.comment || r.quote || r.outcome,
     reviewRating: {
       "@type": "Rating",
       ratingValue: r.rating || 5,
@@ -77,12 +77,12 @@ export default async function ReviewsPage() {
                   ))}
                   {r.verified && <span className="ml-2 rounded bg-primary-50 px-2 py-0.5 text-xs text-primary-700">Verified</span>}
                 </div>
-                <p className="mt-3 text-neutral-900">&ldquo;{r.quote || r.outcome}&rdquo;</p>
-                {r.outcome && r.outcome !== r.quote && (
+                <p className="mt-3 text-neutral-900">&ldquo;{r.comment || r.quote || r.outcome}&rdquo;</p>
+                {r.outcome && r.outcome !== (r.comment || r.quote) && (
                   <p className="mt-2 text-sm text-neutral-600">Outcome: {r.outcome}</p>
                 )}
                 <p className="mt-4 text-sm font-medium text-neutral-900">{r.name}</p>
-                <p className="text-xs text-neutral-600">{r.role}</p>
+                <p className="text-xs text-neutral-600">{r.job_title || r.role}</p>
               </Card>
             ))}
           </div>

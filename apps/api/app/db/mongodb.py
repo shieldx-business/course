@@ -130,6 +130,7 @@ async def seed_db():
         await db.users.insert_one({
             "_id": "user-admin@ascendly.io",
             "email": "admin@ascendly.io",
+            "name": "Admin",
             "password_hash": "$2b$12$3vIAp6VEfE8CD4zAirV2KOYJob2Aci6jW43MrhdFuZ2Mwnb9swCF6",  # password: password
             "phone": None,
             "phone_verified": False,
@@ -138,6 +139,7 @@ async def seed_db():
             "oauth_provider": "email",
             "oauth_id": None,
             "role": "admin",
+            "created_at": datetime.now(timezone.utc).isoformat(),
         })
 
     if await db.categories.count_documents({}) == 0:
@@ -221,9 +223,42 @@ async def seed_db():
 
     if await db.reviews.count_documents({}) == 0:
         reviews = [
-            {"_id": "rev-1", "name": "Sarah Lin", "role": "Operations Analyst", "rating": 5, "verified": True, "outcome": "I finally understood Power BI well enough to run our team's weekly report.", "quote": "The course is structured exactly how I learn."},
-            {"_id": "rev-2", "name": "Marcus Rivera", "role": "Marketing Coordinator", "rating": 5, "verified": True, "outcome": "Excel skills that got me noticed for the promotion I wanted.", "quote": "I use what I learned every single day."},
-            {"_id": "rev-3", "name": "Priya Shah", "role": "Junior UX Designer", "rating": 4, "verified": True, "outcome": "Went from admin work to my first design role in 9 months.", "quote": "The career change path made the difference."},
+            {
+                "_id": "rev-1",
+                "user_id": "user-sarah-lin",
+                "course_id": "course-powerbi",
+                "name": "Sarah Lin",
+                "job_title": "Operations Analyst",
+                "rating": 5,
+                "verified": True,
+                "outcome": "I finally understood Power BI well enough to run our team's weekly report.",
+                "comment": "The course is structured exactly how I learn.",
+                "created_at": datetime(2026, 7, 10, 0, 0, 0, tzinfo=timezone.utc).isoformat(),
+            },
+            {
+                "_id": "rev-2",
+                "user_id": "user-marcus-rivera",
+                "course_id": "course-excel",
+                "name": "Marcus Rivera",
+                "job_title": "Marketing Coordinator",
+                "rating": 5,
+                "verified": True,
+                "outcome": "Excel skills that got me noticed for the promotion I wanted.",
+                "comment": "I use what I learned every single day.",
+                "created_at": datetime(2026, 7, 12, 0, 0, 0, tzinfo=timezone.utc).isoformat(),
+            },
+            {
+                "_id": "rev-3",
+                "user_id": "user-priya-shah",
+                "course_id": "course-leadership",
+                "name": "Priya Shah",
+                "job_title": "Junior UX Designer",
+                "rating": 4,
+                "verified": True,
+                "outcome": "Went from admin work to my first design role in 9 months.",
+                "comment": "The career change path made the difference.",
+                "created_at": datetime(2026, 7, 15, 0, 0, 0, tzinfo=timezone.utc).isoformat(),
+            },
         ]
         await db.reviews.insert_many(reviews)
 

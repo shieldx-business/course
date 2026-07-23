@@ -81,13 +81,24 @@ export default async function CoursesPage({
         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {courses.map((course) => (
             <Link key={course.id} href={`/courses/${course.category_slug}/${course.slug}`}>
-              <Card className="h-full p-5 transition-colors hover:border-accent-500">
-                <Badge variant="primary" className="text-xs">
-                  {course.category_name}
-                </Badge>
-                <h3 className="mt-3 font-medium text-neutral-900">{course.title}</h3>
-                <p className="mt-2 line-clamp-2 text-sm text-neutral-600">{course.description}</p>
-                <p className="mt-4 text-xs text-neutral-600">{course.lesson_count} lessons</p>
+              <Card className="h-full overflow-hidden transition-colors hover:border-accent-500 p-0">
+                <img
+                  src={course.thumbnail_url || "/og-image.png"}
+                  alt={course.title}
+                  width={600}
+                  height={320}
+                  loading="lazy"
+                  decoding="async"
+                  className="aspect-[2/1] w-full object-cover"
+                />
+                <div className="p-5">
+                  <Badge variant="primary" className="text-xs">
+                    {course.category_name}
+                  </Badge>
+                  <h3 className="mt-3 font-medium text-neutral-900">{course.title}</h3>
+                  <p className="mt-2 line-clamp-2 text-sm text-neutral-600">{course.description}</p>
+                  <p className="mt-4 text-xs text-neutral-600">{course.lesson_count} lessons</p>
+                </div>
               </Card>
             </Link>
           ))}

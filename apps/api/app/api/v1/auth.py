@@ -115,6 +115,7 @@ async def signup(body: AuthIn):
         "oauth_provider": "email",
         "oauth_id": None,
         "role": "user",
+        "created_at": datetime.now(timezone.utc).isoformat(),
     }
     await db.users.insert_one(user)
     token_data = _token_payload(user)
@@ -199,7 +200,7 @@ async def request_otp(body: OTPRequest):
     cache = await cache_service.get_cache()
     code = otp_service.generate_otp()
     sanitized = _sanitize_phone(body.phone)
-    await cache.setex(f"otp:{sanitized}", 300, code)
+    await otp_service.store_otp(cache, sanitized, code, 300)
     await otp_service.send_otp(sanitized, code)
     return {"message": "OTP sent", "phone": sanitized}
 
@@ -208,8 +209,7 @@ async def request_otp(body: OTPRequest):
 async def verify_otp(body: OTPVerify):
     cache = await cache_service.get_cache()
     sanitized = _sanitize_phone(body.phone)
-    stored = await cache.get(f"otp:{sanitized}")
-    if not stored or stored != body.code:
+    if not await otp_service.verify_otp(cache, sanitized, body.code):
         raise HTTPException(status_code=400, detail="Invalid or expired OTP")
 
     db = get_db()
@@ -229,6 +229,7 @@ async def verify_otp(body: OTPVerify):
             "oauth_provider": "phone",
             "oauth_id": sanitized,
             "role": "user",
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
         await db.users.insert_one(user)
     else:
@@ -329,6 +330,7 @@ async def google_auth(body: GoogleAuthIn):
             "oauth_provider": "google",
             "oauth_id": idinfo.get("sub"),
             "role": "user",
+            "created_at": datetime.now(timezone.utc).isoformat(),
         }
         await db.users.insert_one(user)
 
