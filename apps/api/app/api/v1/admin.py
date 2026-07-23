@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from app.core.deps import require_admin
 from app.db.mongodb import get_db
+from app.services import ai
 
 router = APIRouter()
 
@@ -49,26 +50,23 @@ async def analytics_summary():
     db = get_db()
     users = await db.users.find().to_list(10000)
     progress = await db.progress.find().to_list(10000)
-    active_subs = await db.subscriptions.count_documents({"status": "active"})
-
-    # Churn risk: users with some progress but no active subscription
-    user_ids_with_progress = {p["user_id"] for p in progress}
-    user_ids_with_active_sub = {s["user_id"] async for s in db.subscriptions.find({"status": "active"})}
-    churn_risk_users = len(user_ids_with_progress - user_ids_with_active_sub)
-
-    # Content gap: category with most courses is considered saturated
+    subscriptions = await db.subscriptions.find().to_list(10000)
     courses = await db.courses.find().to_list(10000)
-    category_counts = {}
-    for c in courses:
-        category_counts[c.get("category_name", "Unknown")] = category_counts.get(c.get("category_name", "Unknown"), 0) + 1
-    top_category = max(category_counts, key=category_counts.get) if category_counts else "N/A"
+    orders = await db.orders.find().to_list(10000)
+
+    metrics = ai.build_metrics(users, progress, subscriptions, courses, orders)
+    llm = ai.summarize_with_llm(metrics)
 
     return {
-        "segment": "high-engagement office workers",
-        "churn_risk_users": churn_risk_users,
-        "active_subscriptions": active_subs,
+        "segment": metrics["segment"],
+        "churn_risk_users": metrics["churn_risk_users"],
+        "active_subscriptions": metrics["active_subscriptions"],
+        "top_category": metrics["top_category"],
+        "recent_30_day_revenue": metrics["recent_30_day_revenue"],
+        "llm_summary": llm["summary"],
+        "llm_source": llm["source"],
         "recommendation": "Offer a 3-day extension to users who completed 2+ lessons then paused.",
-        "content_gap": f"Category with most courses: {top_category} ({category_counts.get(top_category, 0)} courses).",
+        "content_gap": f"Category with most courses: {metrics['top_category']} ({metrics['top_category_count']} courses).",
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
@@ -77,26 +75,22 @@ async def analytics_summary():
 async def analytics_forecast():
     db = get_db()
     orders = await db.orders.find().to_list(10000)
+    progress = await db.progress.find().to_list(10000)
+    subscriptions = await db.subscriptions.find().to_list(10000)
 
-    # Naive 30-day forecast based on average daily revenue from available order history
-    daily_totals = {}
-    for o in orders:
-        day = o.get("created_at", "")[:10]
-        if day:
-            daily_totals[day] = daily_totals.get(day, 0) + o.get("amount", 0)
-
-    avg_daily = sum(daily_totals.values()) / len(daily_totals) if daily_totals else 0
-    predicted_revenue = round(avg_daily * 30, 2)
-    predicted_new_subscriptions = max(1, int(avg_daily * 30 / 50)) if avg_daily else 0
+    revenue = ai.forecast_revenue(orders, 30)
+    subs = ai.forecast_new_subscriptions(orders, 50.0, 30)
+    churn = ai.forecast_churn(progress, subscriptions)
 
     return {
         "next_30_days": {
-            "predicted_revenue": predicted_revenue,
-            "predicted_new_subscriptions": predicted_new_subscriptions,
-            "predicted_churn_rate": 0.05,
-            "confidence": 0.75 if daily_totals else 0.1,
+            "predicted_revenue": revenue["predicted_revenue"],
+            "predicted_new_subscriptions": subs["predicted_new_subscriptions"],
+            "predicted_churn_rate": churn["predicted_churn_rate"],
+            "confidence": revenue["confidence"],
         },
-        "note": "Trend forecast based on average daily revenue from historical orders. Integrate an LSTM model for higher confidence.",
+        "churn_risk_users": churn["churn_risk_users"],
+        "note": revenue["note"],
     }
 
 
