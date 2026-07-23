@@ -160,3 +160,51 @@ async def list_users():
     db = get_db()
     users = await db.users.find().to_list(1000)
     return [{"id": u["_id"], "email": u["email"], "role": u["role"], "phone_verified": u.get("phone_verified", False)} for u in users]
+
+
+@router.get("/orders", dependencies=[Depends(require_admin)])
+async def list_orders():
+    db = get_db()
+    orders = await db.orders.find().to_list(1000)
+    return [{"id": o["_id"], **{k: v for k, v in o.items() if k != "_id"}} for o in orders]
+
+
+@router.get("/coupons", dependencies=[Depends(require_admin)])
+async def list_coupons():
+    db = get_db()
+    coupons = await db.coupons.find().to_list(1000)
+    return [{"id": c["_id"], **{k: v for k, v in c.items() if k != "_id"}} for c in coupons]
+
+
+class CouponIn(BaseModel):
+    code: str
+    discount_type: str = "percent"
+    discount_value: float
+    max_uses: int | None = None
+    expires_at: str | None = None
+
+
+@router.post("/coupons", dependencies=[Depends(require_admin)])
+async def create_coupon(body: CouponIn):
+    db = get_db()
+    coupon_id = f"coupon-{body.code.upper()}"
+    if await db.coupons.find_one({"_id": coupon_id}):
+        raise HTTPException(status_code=400, detail="Coupon code already exists")
+    coupon = {
+        "_id": coupon_id,
+        "code": body.code.upper(),
+        "discount_type": body.discount_type,
+        "discount_value": body.discount_value,
+        "max_uses": body.max_uses,
+        "used_count": 0,
+        "expires_at": body.expires_at,
+    }
+    await db.coupons.insert_one(coupon)
+    return {"id": coupon["_id"], **{k: v for k, v in coupon.items() if k != "_id"}}
+
+
+@router.delete("/coupons/{coupon_id}", dependencies=[Depends(require_admin)])
+async def delete_coupon(coupon_id: str):
+    db = get_db()
+    await db.coupons.delete_many({"_id": coupon_id})
+    return {"deleted": True}
