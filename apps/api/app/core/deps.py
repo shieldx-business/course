@@ -19,7 +19,15 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials | None = De
     user = await db.users.find_one({"_id": user_id})
     if not user:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
-    return {"id": user["_id"], "email": user["email"], "role": user["role"]}
+    return {
+        "id": user["_id"],
+        "email": user["email"],
+        "role": user["role"],
+        "phone": user.get("phone"),
+        "phone_verified": user.get("phone_verified", False),
+        "trial_active": user.get("trial_active", False),
+        "trial_expires": user.get("trial_expires"),
+    }
 
 
 async def require_admin(user: dict = Depends(get_current_user)):

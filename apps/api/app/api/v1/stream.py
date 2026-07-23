@@ -1,7 +1,8 @@
+import math
 import secrets
 import time
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from app.core.deps import get_current_user
 from app.db.mongodb import get_db
@@ -13,14 +14,40 @@ router = APIRouter()
 _stream_tokens: dict[str, dict] = {}
 
 
-def _has_access(user: dict, course: dict, lesson_index: int) -> bool:
+def _trial_unlocked_count(course: dict) -> int:
+    return max(1, math.ceil(len(course.get("syllabus", [])) * 0.1))
+
+
+def _trial_active(user: dict) -> bool:
+    if not user.get("trial_active"):
+        return False
+    expires = user.get("trial_expires")
+    if not expires:
+        return False
+    try:
+        expires_dt = datetime.fromisoformat(expires)
+        if expires_dt.tzinfo is None:
+            expires_dt = expires_dt.replace(tzinfo=timezone.utc)
+        return datetime.now(timezone.utc) < expires_dt
+    except Exception:
+        return False
+
+
+async def _has_access(user: dict, course: dict, lesson_index: int, db) -> bool:
     if user.get("role") == "admin":
         return True
-    # Trial covers the first 10% of lessons for 3 days
-    if user.get("trial_active") and lesson_index < max(1, len(course.get("syllabus", [])) // 10):
+    if _trial_active(user) and lesson_index < _trial_unlocked_count(course):
         return True
-    # TODO: check active subscription for remaining lessons
-    return True
+    sub = await db.subscriptions.find_one({"user_id": user["id"], "status": "active"})
+    if not sub:
+        return False
+    try:
+        ends_at = datetime.fromisoformat(sub["ends_at"])
+        if ends_at.tzinfo is None:
+            ends_at = ends_at.replace(tzinfo=timezone.utc)
+        return datetime.now(timezone.utc) < ends_at
+    except Exception:
+        return False
 
 
 @router.post("/lessons/{lesson_id}/stream-token")
@@ -42,7 +69,7 @@ async def create_stream_token(lesson_id: str, user: dict = Depends(get_current_u
     if not course or not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found")
 
-    if not _has_access(user, course, lesson_index):
+    if not await _has_access(user, course, lesson_index, db):
         raise HTTPException(status_code=403, detail="Subscription or trial required")
 
     token = secrets.token_urlsafe(32)

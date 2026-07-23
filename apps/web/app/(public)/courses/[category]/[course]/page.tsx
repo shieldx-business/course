@@ -44,7 +44,7 @@ export default async function CourseDetailPage({
                 <p className="mt-1 text-sm text-neutral-300">
                   Verify your phone number to preview 10% of this course free for 3 days — no card required.
                 </p>
-                <Link href="/verify-phone">
+                <Link href={`/verify-phone?next=/learn/${course.slug}/${course.syllabus[0]?.id}`}>
                   <Button className="mt-5 bg-accent-500 hover:bg-accent-600 text-white">
                     <Play className="mr-2 h-4 w-4" /> Start free preview
                   </Button>

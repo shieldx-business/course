@@ -6,6 +6,10 @@ export interface User {
   id: string;
   email: string;
   role: "user" | "admin";
+  phone?: string | null;
+  phone_verified?: boolean;
+  trial_active?: boolean;
+  trial_expires?: string | null;
 }
 
 interface AuthContextType {

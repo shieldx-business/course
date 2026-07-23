@@ -1,7 +1,11 @@
-from fastapi import APIRouter, HTTPException
+from datetime import datetime, timedelta, timezone
+from fastapi import APIRouter, HTTPException, Depends, status
 from pydantic import BaseModel
 from app.db.mongodb import get_db
 from app.core.security import hash_password, verify_password, create_access_token, create_refresh_token
+from app.core.deps import get_current_user
+from app.services import cache as cache_service
+from app.services import otp as otp_service
 
 router = APIRouter()
 
@@ -11,9 +15,13 @@ class AuthIn(BaseModel):
     password: str
 
 
-class OTPIn(BaseModel):
+class OTPRequest(BaseModel):
     phone: str
-    code: str | None = None
+
+
+class OTPVerify(BaseModel):
+    phone: str
+    code: str
 
 
 @router.post("/signup")
@@ -27,6 +35,8 @@ async def signup(body: AuthIn):
         "password_hash": hash_password(body.password),
         "phone": None,
         "phone_verified": False,
+        "trial_active": False,
+        "trial_expires": None,
         "role": "user",
     }
     await db.users.insert_one(user)
@@ -34,7 +44,7 @@ async def signup(body: AuthIn):
     return {
         "access_token": create_access_token(token_data),
         "refresh_token": create_refresh_token(token_data),
-        "user": {"id": user["_id"], "email": user["email"], "role": user["role"]},
+        "user": {"id": user["_id"], "email": user["email"], "role": user["role"], "trial_active": False},
     }
 
 
@@ -48,17 +58,64 @@ async def login(body: AuthIn):
     return {
         "access_token": create_access_token(token_data),
         "refresh_token": create_refresh_token(token_data),
-        "user": {"id": user["_id"], "email": user["email"], "role": user["role"]},
+        "user": {
+            "id": user["_id"],
+            "email": user["email"],
+            "role": user["role"],
+            "phone_verified": user.get("phone_verified", False),
+            "trial_active": user.get("trial_active", False),
+            "trial_expires": user.get("trial_expires"),
+        },
     }
 
 
 @router.post("/otp/request")
-async def request_otp(body: OTPIn):
-    return {"message": "OTP sent", "phone": body.phone}
+async def request_otp(body: OTPRequest, user: dict = Depends(get_current_user)):
+    cache = await cache_service.get_cache()
+    code = otp_service.generate_otp()
+    sanitized = "".join(c for c in body.phone if c.isdigit() or c == "+")
+    await cache.setex(f"otp:{user['id']}:{sanitized}", 300, code)
+    await otp_service.send_otp(sanitized, code)
+    return {"message": "OTP sent", "phone": sanitized}
 
 
 @router.post("/otp/verify")
-async def verify_otp(body: OTPIn):
-    if not body.code or len(body.code) != 6:
-        raise HTTPException(status_code=400, detail="Invalid OTP")
-    return {"verified": True, "trial_active": True, "trial_expires": "2026-07-25T23:59:59Z"}
+async def verify_otp(body: OTPVerify, user: dict = Depends(get_current_user)):
+    cache = await cache_service.get_cache()
+    sanitized = "".join(c for c in body.phone if c.isdigit() or c == "+")
+    stored = await cache.get(f"otp:{user['id']}:{sanitized}")
+    if not stored or stored != body.code:
+        raise HTTPException(status_code=400, detail="Invalid or expired OTP")
+
+    db = get_db()
+    trial_expires = (datetime.now(timezone.utc) + timedelta(days=3)).isoformat()
+    await db.users.update_one(
+        {"_id": user["id"]},
+        {
+            "$set": {
+                "phone": sanitized,
+                "phone_verified": True,
+                "trial_active": True,
+                "trial_expires": trial_expires,
+            }
+        },
+    )
+    await cache.delete(f"otp:{user['id']}:{sanitized}")
+
+    updated = await db.users.find_one({"_id": user["id"]})
+    token_data = {"sub": updated["_id"], "email": updated["email"], "role": updated["role"]}
+    return {
+        "verified": True,
+        "trial_active": True,
+        "trial_expires": trial_expires,
+        "access_token": create_access_token(token_data),
+        "refresh_token": create_refresh_token(token_data),
+        "user": {
+            "id": updated["_id"],
+            "email": updated["email"],
+            "role": updated["role"],
+            "phone_verified": True,
+            "trial_active": True,
+            "trial_expires": trial_expires,
+        },
+    }

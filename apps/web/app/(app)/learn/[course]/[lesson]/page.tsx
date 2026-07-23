@@ -1,21 +1,33 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Check, Lock } from "lucide-react";
 import { apiFetch } from "@/lib/api-client";
+import { useAuth } from "@/lib/auth-context";
 import { Course, Lesson, Progress } from "@/types";
+
+interface Subscription {
+  id: string;
+  status: string;
+  ends_at: string;
+}
 
 export default function CoursePlayerPage({ params }: { params: { course: string; lesson: string } }) {
   const router = useRouter();
+  const { user } = useAuth();
   const [course, setCourse] = useState<Course | null>(null);
   const [progress, setProgress] = useState<Record<string, Progress>>({});
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   useEffect(() => {
+    setLoading(true);
     apiFetch(`/courses/${params.course}`)
       .then(setCourse)
       .catch((e) => setError(e.message))
@@ -28,18 +40,35 @@ export default function CoursePlayerPage({ params }: { params: { course: string;
         setProgress(map);
       })
       .catch(() => {});
+
+    apiFetch("/subscriptions/me")
+      .then(setSubscription)
+      .catch(() => {});
   }, [params.course]);
 
   const current: Lesson | undefined = course?.syllabus.find((l) => l.id === params.lesson);
   const currentIndex = course?.syllabus.findIndex((l) => l.id === params.lesson) ?? 0;
 
-  const lessonId = current?.id;
+  const trialActive = !!user?.trial_active && !!user?.trial_expires && new Date(user.trial_expires) > new Date();
+  const trialUnlockCount = course ? Math.max(1, Math.ceil(course.syllabus.length * 0.1)) : 0;
+
+  const hasAccess = useCallback(
+    (lessonIndex: number) => {
+      if (user?.role === "admin" || subscription?.status === "active") return true;
+      if (trialActive) return lessonIndex < trialUnlockCount;
+      return false;
+    },
+    [user, subscription, trialActive, trialUnlockCount]
+  );
+
   useEffect(() => {
-    if (!lessonId) return;
-    apiFetch(`/lessons/${lessonId}/stream-token`, { method: "POST" })
+    if (!current || !hasAccess(currentIndex)) return;
+    setVideoUrl(null);
+    setError("");
+    apiFetch(`/lessons/${current.id}/stream-token`, { method: "POST" })
       .then((data) => setVideoUrl(`${process.env.NEXT_PUBLIC_API_URL || ""}/api/v1${data.stream_url}`))
       .catch((e) => setError(e.message));
-  }, [lessonId]);
+  }, [current, currentIndex, hasAccess]);
 
   const updateProgress = (completed: boolean, last_position_seconds: number) => {
     if (!current) return;
@@ -53,7 +82,7 @@ export default function CoursePlayerPage({ params }: { params: { course: string;
 
   const isLocked = (lesson: Lesson) => {
     const idx = course?.syllabus.findIndex((l) => l.id === lesson.id) ?? 0;
-    // Lock if previous lesson not completed (except first)
+    if (!hasAccess(idx)) return true;
     if (idx === 0) return false;
     const prev = course?.syllabus[idx - 1];
     return prev ? !progress[prev.id]?.completed : false;
@@ -66,6 +95,29 @@ export default function CoursePlayerPage({ params }: { params: { course: string;
 
   if (loading) return <p className="py-20 text-center text-neutral-600">Loading course...</p>;
   if (!course || !current) return <p className="py-20 text-center text-error">{error || "Course not found"}</p>;
+
+  if (!hasAccess(currentIndex)) {
+    return (
+      <section className="py-20 text-center">
+        <h1 className="text-2xl font-semibold text-primary-900">This lesson is locked</h1>
+        <p className="mt-2 text-neutral-600">
+          {trialActive
+            ? "Your free preview covers the first 10% of this course. Subscribe to unlock the full library."
+            : "Verify your phone for a 3-day preview, or subscribe for full access."}
+        </p>
+        <div className="mt-6 flex justify-center gap-4">
+          {!trialActive && (
+            <Link href={`/verify-phone?next=/learn/${params.course}/${params.lesson}`}>
+              <Button>Start free preview</Button>
+            </Link>
+          )}
+          <Link href="/pricing">
+            <Button variant="secondary">See plans</Button>
+          </Link>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="py-6">
