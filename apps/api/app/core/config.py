@@ -16,7 +16,13 @@ class Settings(BaseSettings):
     stripe_webhook_secret: str = ""
     paypal_client_id: str = ""
     paypal_client_secret: str = ""
+    paypal_webhook_id: str = ""
     sms_provider_api_key: str = ""
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_password: str = ""
+    from_email: str = "noreply@ascendly.io"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o-mini"
 
