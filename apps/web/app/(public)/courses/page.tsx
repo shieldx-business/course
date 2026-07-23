@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Course } from "@/types";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Course, Category } from "@/types";
 
 export default async function CoursesPage({
   searchParams,
@@ -9,16 +11,28 @@ export default async function CoursesPage({
   searchParams: { [key: string]: string | string[] | undefined };
 }) {
   const search = typeof searchParams.search === "string" ? searchParams.search : "";
+  const category = typeof searchParams.category === "string" ? searchParams.category : "";
+
+  const apiBase = process.env.API_BASE_URL || "http://localhost:8000";
   let courses: Course[] = [];
+  let categories: Category[] = [];
+
   try {
-    const res = await fetch(
-      `${process.env.API_BASE_URL || "http://localhost:8000"}/api/v1/courses?search=${encodeURIComponent(search)}`,
-      { next: { revalidate: 60 } }
-    );
-    if (res.ok) courses = await res.json();
+    const [coursesRes, catsRes] = await Promise.all([
+      fetch(`${apiBase}/api/v1/courses?search=${encodeURIComponent(search)}&category=${encodeURIComponent(category)}`, {
+        next: { revalidate: 60 },
+      }),
+      fetch(`${apiBase}/api/v1/categories`, { next: { revalidate: 60 } }),
+    ]);
+    if (coursesRes.ok) courses = await coursesRes.json();
+    if (catsRes.ok) categories = await catsRes.json();
   } catch {
     courses = [];
+    categories = [];
   }
+
+  const query = new URLSearchParams();
+  if (search) query.set("search", search);
 
   return (
     <section className="py-12">
@@ -26,16 +40,40 @@ export default async function CoursesPage({
         <h1 className="text-3xl font-semibold text-primary-900">Course library</h1>
         <p className="mt-2 text-neutral-600">{courses.length} courses included with every membership.</p>
 
+        <form className="mt-6 flex flex-col gap-3 sm:flex-row" action="/courses" method="GET">
+          <Input name="search" defaultValue={search} placeholder="Search courses..." className="flex-1" />
+          <input type="hidden" name="category" value={category} />
+          <Button type="submit">Search</Button>
+        </form>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Link
+            href="/courses"
+            className={`rounded-full px-3 py-1 text-sm ${!category ? "bg-primary-700 text-white" : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"}`}
+          >
+            All
+          </Link>
+          {categories.map((c) => (
+            <Link
+              key={c.id}
+              href={`/courses?category=${c.slug}${search ? `&search=${encodeURIComponent(search)}` : ""}`}
+              className={`rounded-full px-3 py-1 text-sm ${category === c.slug ? "bg-primary-700 text-white" : "bg-neutral-100 text-neutral-700 hover:bg-neutral-200"}`}
+            >
+              {c.name}
+            </Link>
+          ))}
+        </div>
+
         {search && (
           <p className="mt-4 text-sm text-neutral-600">
-            Showing results for &ldquo;{search}&rdquo;
+            Showing results for &ldquo;{search}&rdquo;{category && ` in ${categories.find((c) => c.slug === category)?.name || category}`}
           </p>
         )}
 
         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {courses.map((course) => (
             <Link key={course.id} href={`/courses/${course.category_slug}/${course.slug}`}>
-              <Card className="h-full p-5 hover:border-accent-500 transition-colors">
+              <Card className="h-full p-5 transition-colors hover:border-accent-500">
                 <Badge variant="primary" className="text-xs">
                   {course.category_name}
                 </Badge>
