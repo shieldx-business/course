@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timezone
 from typing import Any
 from motor.motor_asyncio import AsyncIOMotorClient
 from app.core.config import settings
@@ -215,6 +216,17 @@ async def seed_db():
             {"_id": "rev-3", "name": "Priya Shah", "role": "Junior UX Designer", "outcome": "Went from admin work to my first design role in 9 months.", "quote": "The career change path made the difference."},
         ]
         await db.reviews.insert_many(reviews)
+
+    if await db.coupons.count_documents({}) == 0:
+        await db.coupons.insert_one({
+            "_id": "coupon-launch20",
+            "code": "LAUNCH20",
+            "discount_type": "percent",
+            "discount_value": 20,
+            "max_uses": 500,
+            "used_count": 0,
+            "expires_at": datetime(2026, 12, 31, 23, 59, 59, tzinfo=timezone.utc).isoformat(),
+        })
 
     if await db.tiers.count_documents({}) == 0:
         tiers = [

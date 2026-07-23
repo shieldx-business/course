@@ -64,7 +64,7 @@ export default async function PricingPage() {
                 <li className="flex items-center gap-2"><Check className="h-4 w-4 text-success" /> Cancel anytime</li>
                 <li className="flex items-center gap-2"><Check className="h-4 w-4 text-success" /> 7-day guarantee</li>
               </ul>
-              <Link href="/checkout" className="mt-6">
+              <Link href={`/checkout?tier=${tier.id}`} className="mt-6">
                 <Button variant={tier.recommended ? "primary" : "secondary"} className="w-full">
                   Subscribe
                 </Button>
