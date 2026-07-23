@@ -6,23 +6,40 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { apiFetch } from "@/lib/api-client";
 
+interface Lesson {
+  id: string;
+  title: string;
+  drive_file_id?: string;
+}
+
 interface Course {
   id: string;
   title: string;
   slug: string;
   category_name: string;
   lesson_count: number;
+  syllabus: Lesson[];
+}
+
+interface DriveFile {
+  id: string;
+  name: string;
 }
 
 export default function AdminCourses() {
   const [courses, setCourses] = useState<Course[]>([]);
+  const [driveFiles, setDriveFiles] = useState<DriveFile[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [form, setForm] = useState({ category_id: "", title: "", slug: "", description: "" });
+  const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
-    apiFetch("/admin/courses")
-      .then(setCourses)
+    Promise.all([apiFetch("/admin/courses"), apiFetch("/admin/drive/files")])
+      .then(([c, d]) => {
+        setCourses(c);
+        setDriveFiles(d.files || []);
+      })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
@@ -48,6 +65,20 @@ export default function AdminCourses() {
     setCourses(courses.filter((c) => c.id !== id));
   };
 
+  const mapDrive = async (courseId: string, lessonId: string, driveFileId: string) => {
+    setError("");
+    try {
+      await apiFetch(`/admin/courses/${courseId}/lessons/${lessonId}/drive`, {
+        method: "PUT",
+        body: JSON.stringify({ drive_file_id: driveFileId }),
+      });
+      const updated = await apiFetch("/admin/courses");
+      setCourses(updated);
+    } catch (e: any) {
+      setError(e.message);
+    }
+  };
+
   return (
     <section className="py-12">
       <div>
@@ -70,12 +101,40 @@ export default function AdminCourses() {
           {loading ? <p className="mt-3 text-sm text-neutral-600">Loading...</p> : (
             <ul className="mt-3 space-y-3">
               {courses.map((c) => (
-                <li key={c.id} className="flex items-center justify-between border-b border-neutral-100 pb-2">
-                  <div>
-                    <p className="font-medium text-neutral-900">{c.title}</p>
-                    <p className="text-xs text-neutral-600">{c.category_name} · {c.lesson_count} lessons</p>
+                <li key={c.id} className="border-b border-neutral-100 pb-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium text-neutral-900">{c.title}</p>
+                      <p className="text-xs text-neutral-600">{c.category_name} · {c.lesson_count} lessons</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" variant="secondary" onClick={() => setExpanded(expanded === c.id ? null : c.id)}>
+                        {expanded === c.id ? "Hide lessons" : "Manage videos"}
+                      </Button>
+                      <Button variant="secondary" size="sm" onClick={() => remove(c.id)}>Delete</Button>
+                    </div>
                   </div>
-                  <Button variant="secondary" size="sm" onClick={() => remove(c.id)}>Delete</Button>
+                  {expanded === c.id && (
+                    <div className="mt-3 space-y-2">
+                      {c.syllabus.map((lesson) => (
+                        <div key={lesson.id} className="grid gap-2 rounded-md bg-neutral-50 p-3 md:grid-cols-3">
+                          <p className="text-sm text-neutral-900">{lesson.title}</p>
+                          <p className="text-xs text-neutral-600">{lesson.drive_file_id ? `Drive: ${lesson.drive_file_id}` : "No Drive file mapped"}</p>
+                          <select
+                            value={lesson.drive_file_id || ""}
+                            onChange={(e) => mapDrive(c.id, lesson.id, e.target.value)}
+                            className="rounded-md border border-neutral-300 p-2 text-sm"
+                          >
+                            <option value="">Select Drive file</option>
+                            {driveFiles.map((f) => (
+                              <option key={f.id} value={f.id}>{f.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                      ))}
+                      {c.syllabus.length === 0 && <p className="text-sm text-neutral-600">No lessons yet.</p>}
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>

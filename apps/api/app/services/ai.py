@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from statistics import mean
 from typing import Any
+import numpy as np
 from app.core.config import settings
 
 
@@ -26,7 +27,7 @@ def _moving_average(values: list[float], window: int) -> list[float]:
     return result
 
 
-def forecast_revenue(orders: list[dict], horizon_days: int = 30) -> dict[str, Any]:
+def _naive_forecast(orders: list[dict], horizon_days: int) -> dict[str, Any]:
     values = _daily_totals(orders)
     if len(values) < 2:
         return {"predicted_revenue": 0.0, "confidence": 0.1, "note": "Not enough order history for a reliable forecast."}
@@ -41,7 +42,80 @@ def forecast_revenue(orders: list[dict], horizon_days: int = 30) -> dict[str, An
     avg = mean(values)
     std = (sum((v - avg) ** 2 for v in values) / len(values)) ** 0.5
     confidence = max(0.1, min(0.95, 1 - (std / (avg + 1e-6)) * 0.5)) if avg else 0.1
-    return {"predicted_revenue": round(total, 2), "confidence": round(confidence, 2), "note": "Lightweight LSTM-style trend forecast based on daily revenue moving average."}
+    return {
+        "predicted_revenue": round(total, 2),
+        "confidence": round(confidence, 2),
+        "note": "Fallback moving-average trend forecast due to insufficient data or model unavailability.",
+        "model": "fallback",
+    }
+
+
+def _build_lstm_forecast(values: list[float], horizon_days: int) -> dict[str, Any] | None:
+    try:
+        import tensorflow as tf
+    except Exception:
+        return None
+
+    if len(values) < 14:
+        return None
+
+    # Normalize
+    arr = np.array(values, dtype=np.float32).reshape(-1, 1)
+    min_v = arr.min()
+    max_v = arr.max()
+    if max_v - min_v == 0:
+        return None
+    norm = (arr - min_v) / (max_v - min_v)
+
+    seq_len = 7
+    X, y = [], []
+    for i in range(seq_len, len(norm)):
+        X.append(norm[i - seq_len:i])
+        y.append(norm[i])
+    X = np.array(X)
+    y = np.array(y)
+
+    if len(X) < 5:
+        return None
+
+    tf.random.set_seed(42)
+    model = tf.keras.Sequential([
+        tf.keras.layers.LSTM(32, input_shape=(seq_len, 1)),
+        tf.keras.layers.Dense(1),
+    ])
+    model.compile(optimizer="adam", loss="mse")
+    model.fit(X, y, epochs=50, verbose=0, batch_size=4)
+
+    # Iterative forecast
+    last_seq = norm[-seq_len:].reshape(1, seq_len, 1)
+    preds = []
+    for _ in range(horizon_days):
+        nxt = model.predict(last_seq, verbose=0)[0, 0]
+        preds.append(nxt)
+        last_seq = np.append(last_seq[:, 1:, :], [[[nxt]]], axis=1)
+
+    predictions = np.array(preds) * (max_v - min_v) + min_v
+    total = float(np.sum(predictions))
+    std = float(np.std(predictions)) if len(predictions) > 1 else 0.0
+    avg = total / horizon_days
+    confidence = max(0.1, min(0.95, 1 - (std / (avg + 1e-6)) * 0.5)) if avg else 0.1
+    return {
+        "predicted_revenue": round(total, 2),
+        "confidence": round(confidence, 2),
+        "note": "Trained a univariate LSTM model on daily revenue totals to forecast the next 30 days.",
+        "model": "lstm",
+    }
+
+
+def forecast_revenue(orders: list[dict], horizon_days: int = 30) -> dict[str, Any]:
+    values = _daily_totals(orders)
+    if len(values) < 2:
+        return {"predicted_revenue": 0.0, "confidence": 0.1, "note": "Not enough order history for a reliable forecast.", "model": "none"}
+
+    lstm = _build_lstm_forecast(values, horizon_days)
+    if lstm:
+        return lstm
+    return _naive_forecast(orders, horizon_days)
 
 
 def forecast_new_subscriptions(orders: list[dict], avg_order_value: float = 50.0, horizon_days: int = 30) -> dict[str, Any]:

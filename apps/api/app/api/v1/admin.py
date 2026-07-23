@@ -1,10 +1,13 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 from app.core.deps import require_admin
+from app.core.config import settings
 from app.db.mongodb import get_db
 from app.services import ai
+from app.services import payment as payment_service
+from app.services import drive as drive_service
 
 router = APIRouter()
 
@@ -29,6 +32,22 @@ class CourseIn(BaseModel):
     description: str
     syllabus: List[LessonIn] = Field(default_factory=list)
     outcome: List[str] = Field(default_factory=list)
+
+
+class UserUpdateIn(BaseModel):
+    name: str | None = None
+    role: str | None = None
+
+
+class SubscriptionOverrideIn(BaseModel):
+    tier_id: str
+    duration_months: int | None = None
+    ends_at: str | None = None
+    status: str = "active"
+
+
+class DriveMapIn(BaseModel):
+    drive_file_id: str
 
 
 @router.get("/dashboard", dependencies=[Depends(require_admin)])
@@ -97,6 +116,7 @@ async def analytics_forecast():
         },
         "churn_risk_users": churn["churn_risk_users"],
         "note": revenue["note"],
+        "model": revenue.get("model", "fallback"),
     }
 
 
@@ -177,6 +197,41 @@ async def delete_course(course_id: str):
     return {"deleted": True}
 
 
+@router.put("/courses/{course_id}/lessons/{lesson_id}/drive", dependencies=[Depends(require_admin)])
+async def map_lesson_drive_file(course_id: str, lesson_id: str, body: DriveMapIn):
+    db = get_db()
+    course = await db.courses.find_one({"_id": course_id})
+    if not course:
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    updated = False
+    syllabus = course.get("syllabus", [])
+    for lesson in syllabus:
+        if lesson["id"] == lesson_id:
+            lesson["drive_file_id"] = body.drive_file_id
+            updated = True
+            break
+
+    if not updated:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+
+    await db.courses.update_one({"_id": course_id}, {"$set": {"syllabus": syllabus}})
+    return {"lesson_id": lesson_id, "drive_file_id": body.drive_file_id}
+
+
+@router.get("/drive/files", dependencies=[Depends(require_admin)])
+async def list_drive_files():
+    service = drive_service.get_drive_service()
+    if not service:
+        return {"configured": False, "files": []}
+
+    folder_id = settings.drive_root_folder_id
+    query = f"'{folder_id}' in parents and mimeType contains 'video/'" if folder_id else "mimeType contains 'video/'"
+    results = service.files().list(q=query, pageSize=50, fields="files(id,name)").execute()
+    files = results.get("files", [])
+    return {"configured": True, "files": [{"id": f["id"], "name": f["name"]} for f in files]}
+
+
 @router.post("/courses/{course_id}/lessons", dependencies=[Depends(require_admin)])
 async def add_lesson(course_id: str, body: LessonIn):
     db = get_db()
@@ -211,7 +266,86 @@ async def delete_lesson(course_id: str, lesson_id: str):
 async def list_users():
     db = get_db()
     users = await db.users.find().to_list(1000)
-    return [{"id": u["_id"], "email": u["email"], "role": u["role"], "phone_verified": u.get("phone_verified", False)} for u in users]
+    return [{"id": u["_id"], "email": u["email"], "name": u.get("name", ""), "role": u["role"], "phone_verified": u.get("phone_verified", False)} for u in users]
+
+
+@router.get("/users/{user_id}", dependencies=[Depends(require_admin)])
+async def get_user(user_id: str):
+    db = get_db()
+    user = await db.users.find_one({"_id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    sub = await db.subscriptions.find_one({"user_id": user_id, "status": "active"})
+    return {
+        "id": user["_id"],
+        "email": user["email"],
+        "name": user.get("name", ""),
+        "role": user["role"],
+        "phone_verified": user.get("phone_verified", False),
+        "subscription": sub,
+    }
+
+
+@router.put("/users/{user_id}", dependencies=[Depends(require_admin)])
+async def update_user(user_id: str, body: UserUpdateIn):
+    db = get_db()
+    user = await db.users.find_one({"_id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    updates = {}
+    if body.name is not None:
+        updates["name"] = body.name
+    if body.role is not None:
+        updates["role"] = body.role
+    if updates:
+        await db.users.update_one({"_id": user_id}, {"$set": updates})
+    updated = await db.users.find_one({"_id": user_id})
+    return {"id": updated["_id"], "email": updated["email"], "name": updated.get("name", ""), "role": updated["role"]}
+
+
+@router.post("/users/{user_id}/subscription", dependencies=[Depends(require_admin)])
+async def override_subscription(user_id: str, body: SubscriptionOverrideIn):
+    db = get_db()
+    user = await db.users.find_one({"_id": user_id})
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    tier = await db.tiers.find_one({"_id": body.tier_id}) or await db.tiers.find_one({"id": body.tier_id})
+    if not tier:
+        raise HTTPException(status_code=404, detail="Tier not found")
+
+    # Cancel any active subscription
+    await db.subscriptions.update_many({"user_id": user_id, "status": "active"}, {"$set": {"status": "canceled", "updated_at": datetime.now(timezone.utc).isoformat()}})
+
+    now = datetime.now(timezone.utc)
+    if body.ends_at:
+        ends_at = body.ends_at
+    elif body.duration_months is not None:
+        ends_at = (now + timedelta(days=30 * body.duration_months)).isoformat()
+    else:
+        ends_at = (now + timedelta(days=30)).isoformat()
+
+    sub_id = f"sub-{user_id}-{now.timestamp()}"
+    await db.subscriptions.insert_one({
+        "_id": sub_id,
+        "user_id": user_id,
+        "tier": tier["id"],
+        "status": body.status,
+        "starts_at": now.isoformat(),
+        "ends_at": ends_at,
+    })
+    return {"subscription_id": sub_id, "status": body.status, "ends_at": ends_at}
+
+
+@router.delete("/users/{user_id}/subscription", dependencies=[Depends(require_admin)])
+async def cancel_user_subscription(user_id: str):
+    db = get_db()
+    result = await db.subscriptions.update_many(
+        {"user_id": user_id, "status": "active"},
+        {"$set": {"status": "canceled", "ends_at": datetime.now(timezone.utc).isoformat(), "updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    return {"canceled": result}
 
 
 @router.get("/orders", dependencies=[Depends(require_admin)])
@@ -219,6 +353,45 @@ async def list_orders():
     db = get_db()
     orders = await db.orders.find().to_list(1000)
     return [{"id": o["_id"], **{k: v for k, v in o.items() if k != "_id"}} for o in orders]
+
+
+@router.post("/orders/{order_id}/refund", dependencies=[Depends(require_admin)])
+async def refund_order(order_id: str):
+    db = get_db()
+    order = await db.orders.find_one({"_id": order_id})
+    if not order:
+        raise HTTPException(status_code=404, detail="Order not found")
+    if order.get("payment_status") == "refunded":
+        raise HTTPException(status_code=400, detail="Order already refunded")
+
+    # Attempt provider refund
+    provider = order.get("payment_provider")
+    external_id = order.get("external_id")
+    refund_error = None
+    if provider == "stripe" and external_id and settings.stripe_secret_key:
+        try:
+            payment_service.refund_stripe(external_id)
+        except Exception as e:
+            refund_error = str(e)
+    elif provider == "paypal" and external_id and settings.paypal_client_id:
+        try:
+            await payment_service.refund_paypal(external_id)
+        except Exception as e:
+            refund_error = str(e)
+
+    now = datetime.now(timezone.utc).isoformat()
+    await db.orders.update_one(
+        {"_id": order_id},
+        {"$set": {"payment_status": "refunded", "refunded_at": now, "refund_error": refund_error}}
+    )
+
+    if order.get("subscription_id"):
+        await db.subscriptions.update_one(
+            {"_id": order["subscription_id"]},
+            {"$set": {"status": "canceled", "ends_at": now, "updated_at": now}}
+        )
+
+    return {"refunded": True, "order_id": order_id, "refund_error": refund_error}
 
 
 @router.get("/coupons", dependencies=[Depends(require_admin)])

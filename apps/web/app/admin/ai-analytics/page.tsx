@@ -27,6 +27,7 @@ interface Forecast {
   };
   churn_risk_users: number;
   note: string;
+  model: string;
 }
 
 export default function AIAnalyticsPage() {
@@ -89,6 +90,7 @@ export default function AIAnalyticsPage() {
                   <li><strong>Confidence:</strong> {(forecast.next_30_days.confidence * 100).toFixed(0)}%</li>
                 </ul>
                 <p className="text-xs text-neutral-500">{forecast.note}</p>
+                <p className="text-xs text-neutral-500">Model: {forecast.model || "fallback"}</p>
               </div>
             )}
             {error && <p className="mt-3 text-sm text-error">{error}</p>}

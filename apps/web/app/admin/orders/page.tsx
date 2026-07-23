@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api-client";
 
 interface Order {
@@ -13,12 +14,14 @@ interface Order {
   payment_status: string;
   coupon_code: string | null;
   created_at: string;
+  refunded_at?: string;
 }
 
 export default function AdminOrders() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [refunding, setRefunding] = useState<string | null>(null);
 
   useEffect(() => {
     apiFetch("/admin/orders")
@@ -26,6 +29,20 @@ export default function AdminOrders() {
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, []);
+
+  const refund = async (id: string) => {
+    setRefunding(id);
+    setError("");
+    try {
+      await apiFetch(`/admin/orders/${id}/refund`, { method: "POST" });
+      const updated = await apiFetch("/admin/orders");
+      setOrders(updated);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setRefunding(null);
+    }
+  };
 
   return (
     <section className="py-12">
@@ -42,6 +59,7 @@ export default function AdminOrders() {
                   <th className="pb-3 font-medium text-neutral-900">Provider</th>
                   <th className="pb-3 font-medium text-neutral-900">Status</th>
                   <th className="pb-3 font-medium text-neutral-900">Coupon</th>
+                  <th className="pb-3 font-medium text-neutral-900">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -53,6 +71,13 @@ export default function AdminOrders() {
                     <td className="py-3 text-neutral-600">{o.payment_provider}</td>
                     <td className="py-3 text-neutral-600">{o.payment_status}</td>
                     <td className="py-3 text-neutral-600">{o.coupon_code || "—"}</td>
+                    <td className="py-3">
+                      {o.payment_status !== "refunded" && (
+                        <Button size="sm" onClick={() => refund(o.id)} disabled={refunding === o.id}>
+                          {refunding === o.id ? "Refunding..." : "Refund"}
+                        </Button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>

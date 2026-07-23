@@ -132,6 +132,31 @@ async def _paypal_access_token() -> str:
         return res.json()["access_token"]
 
 
+def refund_stripe(session_id: str):
+    stripe = _stripe_client()
+    if not stripe:
+        raise RuntimeError("Stripe is not configured")
+    session = stripe.checkout.Session.retrieve(session_id)
+    payment_intent = session.get("payment_intent")
+    if not payment_intent:
+        raise RuntimeError("No payment_intent found for session")
+    return stripe.Refund.create(payment_intent=payment_intent)
+
+
+async def refund_paypal(capture_id: str):
+    if not settings.paypal_client_id or not settings.paypal_client_secret:
+        raise RuntimeError("PayPal is not configured")
+    import httpx
+    access_token = await _paypal_access_token()
+    async with httpx.AsyncClient() as client:
+        res = await client.post(
+            f"https://api-m.sandbox.paypal.com/v2/payments/captures/{capture_id}/refund",
+            headers={"Authorization": f"Bearer {access_token}", "Content-Type": "application/json"},
+        )
+        res.raise_for_status()
+        return res.json()
+
+
 async def verify_paypal_event(headers: dict, body: bytes) -> dict:
     # In production, PayPal webhook verification requires fetching the event by ID
     # using the API to confirm it exists and matches the payload.

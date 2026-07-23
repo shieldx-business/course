@@ -42,6 +42,12 @@ class InMemoryCollection:
             doc.update(update["$set"])
             self.data.append(doc)
 
+    async def update_many(self, query, update):
+        for d in self.data:
+            if self._match(d, query):
+                if "$set" in update:
+                    d.update(update["$set"])
+
     async def delete_many(self, query=None):
         query = query or {}
         self.data = [d for d in self.data if not self._match(d, query)]
