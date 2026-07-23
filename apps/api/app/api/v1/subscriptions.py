@@ -58,6 +58,13 @@ async def get_my_subscription(user: dict = Depends(get_current_user)):
     }
 
 
+@router.get("/subscriptions/orders")
+async def get_my_orders(user: dict = Depends(get_current_user)):
+    db = get_db()
+    orders = await db.orders.find({"user_id": user["id"]}).to_list(100)
+    return [{"id": o["_id"], **{k: v for k, v in o.items() if k != "_id"}} for o in orders]
+
+
 class CheckoutIn(BaseModel):
     tier_id: str
     coupon_code: str | None = None
