@@ -49,3 +49,13 @@ export interface Review {
   quote: string;
   outcome: string;
 }
+
+export interface Progress {
+  id: string;
+  user_id: string;
+  course_id: string;
+  lesson_id: string;
+  completed: boolean;
+  last_position_seconds: number;
+  updated_at: string;
+}

@@ -153,3 +153,10 @@ async def delete_lesson(course_id: str, lesson_id: str):
     course["lesson_count"] = len(course["syllabus"])
     await db.courses.update_one({"_id": course_id}, {"$set": {"syllabus": course["syllabus"], "lesson_count": course["lesson_count"]}})
     return {"deleted": True}
+
+
+@router.get("/users", dependencies=[Depends(require_admin)])
+async def list_users():
+    db = get_db()
+    users = await db.users.find().to_list(1000)
+    return [{"id": u["_id"], "email": u["email"], "role": u["role"], "phone_verified": u.get("phone_verified", False)} for u in users]

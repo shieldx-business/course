@@ -30,12 +30,16 @@ class InMemoryCollection:
     async def insert_one(self, doc: dict):
         self.data.append(doc)
 
-    async def update_one(self, query, update):
+    async def update_one(self, query, update, upsert=False):
         for d in self.data:
             if self._match(d, query):
                 if "$set" in update:
                     d.update(update["$set"])
                 return
+        if upsert and "$set" in update:
+            doc = dict(query)
+            doc.update(update["$set"])
+            self.data.append(doc)
 
     async def delete_many(self, query=None):
         query = query or {}
